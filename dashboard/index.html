@@ -1,0 +1,238 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WireGuard Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f1117; color: #e1e4e8; min-height: 100vh; }
+  #loginScreen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .login-card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 40px 36px; width: 360px; }
+  .login-card h2 { color: #58a6ff; font-size: 22px; margin-bottom: 8px; text-align: center; }
+  .login-card p { color: #8b949e; font-size: 13px; text-align: center; margin-bottom: 28px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 13px; color: #8b949e; margin-bottom: 6px; }
+  .form-group input { width: 100%; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 10px 12px; color: #e1e4e8; font-size: 14px; }
+  .form-group input:focus { outline: none; border-color: #58a6ff; }
+  .login-btn { width: 100%; padding: 10px; background: #238636; color: #fff; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+  .login-btn:hover { background: #2ea043; }
+  .login-error { color: #f85149; font-size: 13px; text-align: center; margin-top: 10px; min-height: 18px; }
+  #appScreen { display: none; }
+  .header { background: #161b22; border-bottom: 1px solid #30363d; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-size: 20px; font-weight: 600; color: #58a6ff; }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  .header .status { font-size: 13px; color: #8b949e; }
+  .btn-logout { padding: 6px 14px; background: transparent; border: 1px solid #30363d; border-radius: 6px; color: #8b949e; cursor: pointer; font-size: 13px; }
+  .btn-logout:hover { background: #30363d; color: #e1e4e8; }
+  .main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  .section-title { font-size: 15px; font-weight: 600; color: #c9d1d9; margin: 24px 0 12px; }
+  .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: 0.15s; }
+  .btn-primary { background: #238636; color: #fff; }
+  .btn-primary:hover { background: #2ea043; }
+  .btn-danger { background: #da3633; color: #fff; }
+  .btn-danger:hover { background: #f85149; }
+  .btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+  .btn-secondary:hover { background: #30363d; }
+  .btn-warning { background: #9e6a03; color: #fff; }
+  .btn-warning:hover { background: #d29922; }
+  .btn-sm { padding: 4px 12px; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; background: #161b22; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+  th { background: #21262d; padding: 10px 16px; text-align: left; font-size: 12px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 12px 16px; border-top: 1px solid #21262d; font-size: 14px; vertical-align: middle; }
+  tr:hover td { background: #1c2128; }
+  .status-pill { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+  .status-pending { background: #9e6a0333; color: #e3b341; border: 1px solid #9e6a03; }
+  .status-approved { background: #1f6feb33; color: #58a6ff; border: 1px solid #1f6feb; }
+  .status-rejected { background: #b62c2c33; color: #f85149; border: 1px solid #b62c2c; }
+  .status-online { background: #1a7f3733; color: #3fb950; border: 1px solid #1a7f37; }
+  .key-mono { font-family: "Courier New", monospace; font-size: 12px; color: #8b949e; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .empty { text-align: center; padding: 40px; color: #8b949e; font-size: 14px; }
+  .info-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+  .info-card h3 { font-size: 14px; color: #8b949e; margin-bottom: 8px; }
+  .info-card p { font-family: monospace; font-size: 14px; color: #58a6ff; word-break: break-all; }
+  .toast { position: fixed; bottom: 24px; right: 24px; background: #238636; color: #fff; padding: 12px 20px; border-radius: 8px; font-size: 14px; display: none; z-index: 1000; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid #30363d; }
+  .tab { padding: 8px 16px; cursor: pointer; font-size: 14px; color: #8b949e; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .add-user-form { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .add-user-form input { background: #21262d; border: 1px solid #30363d; border-radius: 6px; padding: 8px 12px; color: #e1e4e8; font-size: 14px; width: 200px; }
+  .add-user-form input:focus { outline: none; border-color: #58a6ff; }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 28px; width: 340px; }
+  .modal h3 { color: #c9d1d9; margin-bottom: 20px; }
+  .modal .form-group input { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 8px 12px; color: #e1e4e8; font-size: 14px; width: 100%; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+</style>
+</head>
+<body>
+<div id="loginScreen">
+  <div class="login-card">
+    <h2> WireGuard</h2>
+    <p>Dashboard Management</p>
+    <div class="form-group"><label>Username</label><input type="text" id="loginUser" placeholder="admin" autocomplete="username"></div>
+    <div class="form-group"><label>Password</label><input type="password" id="loginPass" placeholder="" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="login-btn" onclick="doLogin()">Sign In</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+<div id="appScreen">
+  <div class="header">
+    <h1> WireGuard Dashboard</h1>
+    <div class="header-right">
+      <span class="status" id="serverStatus"></span>
+      <span id="currentUser" style="color:#8b949e;font-size:13px;"></span>
+      <button class="btn-logout" onclick="doLogout()">Sign Out</button>
+    </div>
+  </div>
+  <div class="main">
+    <div class="info-card" id="serverInfo" style="display:none"><h3>Server Info</h3><p id="serverInfoText"></p></div>
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('pending')" id="tabPending"> Pending</div>
+      <div class="tab" onclick="switchTab('approved')" id="tabApproved"> Approved</div>
+      <div class="tab" onclick="switchTab('rejected')" id="tabRejected"> Rejected</div>
+      <div class="tab" onclick="switchTab('all')" id="tabAll"> All</div>
+      <div class="tab" onclick="switchTab('users')" id="tabUsers"> Users</div>
+    </div>
+    <div class="tab-content active" id="tab-pending">
+      <table><thead><tr><th>Name</th><th>Platform</th><th>Public Key</th><th>Requested</th><th>Actions</th></tr></thead>
+      <tbody id="pendingBody"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody></table>
+    </div>
+    <div class="tab-content" id="tab-approved">
+      <table><thead><tr><th>Name</th><th>Platform</th><th>VPN IP</th><th>Status</th><th>Endpoint</th><th>Approved</th><th>Actions</th></tr></thead>
+      <tbody id="approvedBody"><tr><td colspan="7" class="empty">Loading...</td></tr></tbody></table>
+    </div>
+    <div class="tab-content" id="tab-rejected">
+      <table><thead><tr><th>Name</th><th>Platform</th><th>Public Key</th><th>Actions</th></tr></thead>
+      <tbody id="rejectedBody"><tr><td colspan="4" class="empty">No rejected peers</td></tr></tbody></table>
+    </div>
+    <div class="tab-content" id="tab-all">
+      <table><thead><tr><th>Name</th><th>Platform</th><th>VPN IP</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+      <tbody id="allBody"><tr><td colspan="6" class="empty">Loading...</td></tr></tbody></table>
+    </div>
+    <div class="tab-content" id="tab-users">
+      <div class="section-title">Admin Users</div>
+      <div class="add-user-form">
+        <input type="text" id="newUsername" placeholder="Username">
+        <input type="password" id="newPassword" placeholder="Password">
+        <button class="btn btn-primary" onclick="addUser()">Add User</button>
+      </div>
+      <table><thead><tr><th>Username</th><th>Created</th><th>Actions</th></tr></thead>
+      <tbody id="usersBody"><tr><td colspan="3" class="empty">Loading...</td></tr></tbody></table>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="changePwdModal">
+  <div class="modal">
+    <h3>Change Password</h3>
+    <input type="hidden" id="changePwdUser">
+    <div class="form-group"><label>Username</label><input type="text" id="changePwdUserDisplay" disabled></div>
+    <div class="form-group"><label>New Password</label><input type="password" id="changePwdNew" placeholder="New password"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="doChangePassword()">Save</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const API = window.location.origin;
+let allPeers = [];
+let currentTab = 'pending';
+function getToken(){return localStorage.getItem('wg_token');}
+function saveSession(t,u){localStorage.setItem('wg_token',t);localStorage.setItem('wg_user',u);}
+function clearSession(){localStorage.removeItem('wg_token');localStorage.removeItem('wg_user');}
+function authHeader(){return{'Authorization':'Bearer '+getToken(),'Content-Type':'application/json'};}
+function showToast(msg,isError=false){const t=document.getElementById('toast');t.textContent=msg;t.style.background=isError?'#da3633':'#238636';t.style.display='block';setTimeout(()=>t.style.display='none',3000);}
+async function doLogin(){
+  const u=document.getElementById('loginUser').value.trim(),p=document.getElementById('loginPass').value;
+  document.getElementById('loginError').textContent='';
+  if(!u||!p){document.getElementById('loginError').textContent='Please enter username and password.';return;}
+  try{
+    const res=await fetch(API+'/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    if(!res.ok){const d=await res.json();document.getElementById('loginError').textContent=d.detail||'Login failed.';return;}
+    const data=await res.json();saveSession(data.token,data.username);showApp();loadAll();
+  }catch(e){document.getElementById('loginError').textContent='Connection error: '+e.message;}
+}
+async function doLogout(){
+  try{await fetch(API+'/api/admin/logout',{method:'POST',headers:authHeader()});}catch{}
+  clearSession();showLogin();
+}
+function showLogin(){document.getElementById('loginScreen').style.display='flex';document.getElementById('appScreen').style.display='none';document.getElementById('loginPass').value='';}
+function showApp(){document.getElementById('loginScreen').style.display='none';document.getElementById('appScreen').style.display='block';document.getElementById('currentUser').textContent=' '+(localStorage.getItem('wg_user')||'');}
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab'+name.charAt(0).toUpperCase()+name.slice(1)).classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+  currentTab=name;
+  if(name==='users')loadUsers();
+}
+function platformIcon(p){return p==='android'?'':p==='ios'?'':'';}
+function timeAgo(dt){
+  if(!dt)return'-';
+  const diff=(Date.now()-new Date(dt+'Z').getTime())/1000;
+  if(diff<60)return Math.floor(diff)+'s ago';
+  if(diff<3600)return Math.floor(diff/60)+'m ago';
+  if(diff<86400)return Math.floor(diff/3600)+'h ago';
+  return Math.floor(diff/86400)+'d ago';
+}
+function renderTables(peers){
+  allPeers=peers;
+  const pending=peers.filter(p=>p.status==='pending'),approved=peers.filter(p=>p.status==='approved'),rejected=peers.filter(p=>p.status==='rejected');
+  document.getElementById('pendingBody').innerHTML=pending.length?pending.map(p=>`<tr><td>${p.name}</td><td>${platformIcon(p.platform)} ${p.platform}</td><td><span class="key-mono" title="${p.public_key}">${p.public_key}</span></td><td>${timeAgo(p.created_at)}</td><td class="actions"><button class="btn btn-primary btn-sm" onclick="approvePeer('${p.id}')">✓ Approve</button><button class="btn btn-danger btn-sm" onclick="rejectPeer('${p.id}')">✗ Reject</button></td></tr>`).join(''):'<tr><td colspan="5" class="empty">No pending requests</td></tr>';
+  document.getElementById('approvedBody').innerHTML=approved.length?approved.map(p=>`<tr><td>${p.name}</td><td>${platformIcon(p.platform)} ${p.platform}</td><td><code>${p.vpn_ip||'-'}</code></td><td>${p.online?'<span class="status-pill status-online">● Online</span>':'<span class="status-pill" style="background:#21262d;color:#8b949e;border:1px solid #30363d">Offline</span>'}</td><td style="font-size:12px;color:#8b949e">${p.endpoint||'-'}</td><td>${timeAgo(p.approved_at)}</td><td class="actions"><button class="btn btn-danger btn-sm" onclick="deletePeer('${p.id}')">🗑 Remove</button></td></tr>`).join(''):'<tr><td colspan="7" class="empty">No approved peers</td></tr>';
+  document.getElementById('rejectedBody').innerHTML=rejected.length?rejected.map(p=>`<tr><td>${p.name}</td><td>${platformIcon(p.platform)} ${p.platform}</td><td><span class="key-mono">${p.public_key}</span></td><td class="actions"><button class="btn btn-secondary btn-sm" onclick="deletePeer('${p.id}')">🗑 Delete</button></td></tr>`).join(''):'<tr><td colspan="4" class="empty">No rejected peers</td></tr>';
+  document.getElementById('allBody').innerHTML=peers.length?peers.map(p=>`<tr><td>${p.name}</td><td>${platformIcon(p.platform)} ${p.platform}</td><td>${p.vpn_ip||'-'}</td><td><span class="status-pill status-${p.status}">${p.status}</span></td><td>${timeAgo(p.created_at)}</td><td class="actions">${p.status==='pending'?`<button class="btn btn-primary btn-sm" onclick="approvePeer('${p.id}')">✓</button>`:''}<button class="btn btn-danger btn-sm" onclick="deletePeer('${p.id}')">🗑 Remove</button></td></tr>`).join(''):'<tr><td colspan="6" class="empty">No peers</td></tr>';
+}
+async function loadAll(){
+  try{
+    const res=await fetch(API+'/api/admin/peers',{headers:authHeader()});
+    if(res.status===401){clearSession();showLogin();return;}
+    if(!res.ok){showToast('Failed to load peers',true);return;}
+    const peers=await res.json();renderTables(peers);
+    const si=await fetch(API+'/api/server-info'),info=await si.json();
+    document.getElementById('serverInfo').style.display='block';
+    document.getElementById('serverInfoText').textContent=`Endpoint: ${info.endpoint} | Public Key: ${info.server_public_key} | Subnet: ${info.vpn_subnet}`;
+    document.getElementById('serverStatus').textContent=`${peers.filter(p=>p.online).length} online  ${peers.filter(p=>p.status==='pending').length} pending`;
+  }catch(e){showToast('Connection error: '+e.message,true);}
+}
+async function approvePeer(id){const res=await fetch(API+'/api/admin/approve/'+id,{method:'POST',headers:authHeader()});const d=await res.json();if(res.ok){showToast('✅ Approved! VPN IP: '+d.vpn_ip);loadAll();}else showToast(d.detail||'Error',true);}
+async function rejectPeer(id){if(!confirm('Reject this peer?'))return;const res=await fetch(API+'/api/admin/reject/'+id,{method:'POST',headers:authHeader()});if(res.ok){showToast('Rejected');loadAll();}else showToast('Error',true);}
+async function deletePeer(id){if(!confirm('Delete this peer?'))return;const res=await fetch(API+'/api/admin/peer/'+id,{method:'DELETE',headers:authHeader()});if(res.ok){showToast('Deleted');loadAll();}else showToast('Error',true);}
+async function loadUsers(){
+  const res=await fetch(API+'/api/admin/users',{headers:authHeader()});
+  if(!res.ok){showToast('Failed to load users',true);return;}
+  const users=await res.json(),me=localStorage.getItem('wg_user');
+  document.getElementById('usersBody').innerHTML=users.length?users.map(u=>`<tr><td>${u.username}${u.username===me?' <span style="color:#58a6ff;font-size:12px">(you)</span>':''}</td><td>${timeAgo(u.created_at)}</td><td class="actions"><button class="btn btn-warning btn-sm" onclick="openChangePwd('${u.username}')"> Change Password</button>${u.username!==me?`<button class="btn btn-danger btn-sm" onclick="deleteUser('${u.username}')"> Delete</button>`:''}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">No users</td></tr>';
+}
+async function addUser(){
+  const u=document.getElementById('newUsername').value.trim(),p=document.getElementById('newPassword').value;
+  if(!u||!p){showToast('Username and password required',true);return;}
+  const res=await fetch(API+'/api/admin/users',{method:'POST',headers:authHeader(),body:JSON.stringify({username:u,password:p})});
+  const d=await res.json();
+  if(res.ok){showToast(" User '"+u+"' created");document.getElementById('newUsername').value='';document.getElementById('newPassword').value='';loadUsers();}
+  else showToast(d.detail||'Error',true);
+}
+async function deleteUser(u){
+  if(!confirm("Delete user '"+u+"'?"))return;
+  const res=await fetch(API+'/api/admin/users/'+u,{method:'DELETE',headers:authHeader()});
+  const d=await res.json();if(res.ok){showToast("Deleted '"+u+"'");loadUsers();}else showToast(d.detail||'Error',true);
+}
+function openChangePwd(u){document.getElementById('changePwdUser').value=u;document.getElementById('changePwdUserDisplay').value=u;document.getElementById('changePwdNew').value='';document.getElementById('changePwdModal').classList.add('open');}
+function closeModal(){document.getElementById('changePwdModal').classList.remove('open');}
+async function doChangePassword(){
+  const u=document.getElementById('changePwdUser').value,p=document.getElementById('changePwdNew').value;
+  if(!p){showToast('Enter a new password',true);return;}
+  const res=await fetch(API+'/api/admin/users/'+u+'/password',{method:'PUT',headers:authHeader(),body:JSON.stringify({new_password:p})});
+  const d=await res.json();if(res.ok){showToast('Password changed');closeModal();}else showToast(d.detail||'Error',true);
+}
+setInterval(()=>{if(getToken()&&currentTab!=='users')loadAll();},10000);
+document.addEventListener('DOMContentLoaded',()=>{if(getToken()){showApp();loadAll();}else showLogin();});
+</script>
+</body>
+</html>

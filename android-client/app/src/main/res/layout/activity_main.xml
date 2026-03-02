@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0D1117"
+    tools:context=".MainActivity">
+
+    <!-- ── Global Status Bar (fixed, always visible) ── -->
+    <LinearLayout
+        android:id="@+id/statusBar"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="12dp"
+        android:background="#161B22">
+
+        <View
+            android:id="@+id/viewStatusDot"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:background="@drawable/circle_shape"
+            android:layout_marginEnd="10dp" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Loading..."
+            android:textColor="#C9D1D9"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnConnect"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="▶ Connect"
+            android:backgroundTint="#238636"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:visibility="gone"
+            android:layout_marginStart="8dp" />
+
+        <Button
+            android:id="@+id/btnDisconnect"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="■ Stop"
+            android:backgroundTint="#DA3633"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:visibility="gone"
+            android:layout_marginStart="8dp" />
+
+    </LinearLayout>
+
+    <!-- Thin separator line -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#21262D" />
+
+    <!-- ── Scrollable Content ── -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- VPN IP -->
+        <TextView
+            android:id="@+id/tvVpnIp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:textColor="#58A6FF"
+            android:textSize="13sp"
+            android:paddingBottom="4dp" />
+
+        <!-- Public Key -->
+        <TextView
+            android:id="@+id/tvPublicKey"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:textColor="#6E7681"
+            android:textSize="11sp"
+            android:paddingBottom="12dp" />
+
+        <!-- Error -->
+        <TextView
+            android:id="@+id/tvError"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#B62C2C33"
+            android:padding="10dp"
+            android:textColor="#F85149"
+            android:textSize="14sp"
+            android:visibility="gone"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#30363D"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Setup Card -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚙️ Setup"
+            android:textColor="#C9D1D9"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Server URL"
+            android:textColor="#8B949E"
+            android:textSize="12sp"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/etServerUrl"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="http://103.126.161.38:8080"
+            android:inputType="textUri"
+            android:textColor="#E1E4E8"
+            android:textColorHint="#6E7681"
+            android:background="@drawable/edit_text_bg"
+            android:padding="10dp"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Device Name"
+            android:textColor="#8B949E"
+            android:textSize="12sp"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/etDeviceName"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="My Android Phone"
+            android:inputType="text"
+            android:textColor="#E1E4E8"
+            android:textColorHint="#6E7681"
+            android:background="@drawable/edit_text_bg"
+            android:padding="10dp"
+            android:layout_marginBottom="16dp" />
+
+        <Button
+            android:id="@+id/btnRegister"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="📡 Register Device"
+            android:backgroundTint="#1F6FEB"
+            android:textColor="#FFFFFF"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Auto-connect option -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="24dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Auto-connect on start"
+                    android:textColor="#C9D1D9"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Connect VPN automatically when approved"
+                    android:textColor="#6E7681"
+                    android:textSize="11sp" />
+
+            </LinearLayout>
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switchAutoConnect"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+
+        </LinearLayout>
+
+        <!-- Domain Routing -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#30363D"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🌐 Domain Routing"
+            android:textColor="#C9D1D9"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Only these domains route through VPN. Leave empty to route VPN subnet only (safe split-tunnel)."
+            android:textColor="#6E7681"
+            android:textSize="12sp"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/etDomains"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="100dp"
+            android:hint="example.com&#10;api.game.net&#10;server.example.com"
+            android:inputType="textMultiLine"
+            android:gravity="top"
+            android:textColor="#E1E4E8"
+            android:textColorHint="#6E7681"
+            android:textSize="13sp"
+            android:fontFamily="monospace"
+            android:background="@drawable/edit_text_bg"
+            android:padding="10dp"
+            android:layout_marginBottom="12dp" />
+
+        <Button
+            android:id="@+id/btnSaveDomains"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:text="Save Domains"
+            android:backgroundTint="#21262D"
+            android:strokeWidth="1dp"
+            android:textColor="#C9D1D9"
+            android:layout_marginBottom="32dp" />
+
+    </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>
