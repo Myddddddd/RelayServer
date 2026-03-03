@@ -94,6 +94,30 @@ public class WireGuardManager(ILogger<WireGuardManager> logger)
             await Task.Delay(500);
         }
 
+        // Remove ALL other stale WireGuard tunnel services (routing conflicts)
+        var allSvcs = RunCommand("sc.exe", "query type=all");
+        var staleNames = allSvcs.Split('\n')
+            .Where(l => l.TrimStart().StartsWith("SERVICE_NAME: WireGuardTunnel$"))
+            .Select(l => l.Trim().Replace("SERVICE_NAME: WireGuardTunnel$", ""))
+            .Where(n => n.Trim() != TunnelName)
+            .Select(n => n.Trim())
+            .ToList();
+        foreach (var staleName in staleNames)
+        {
+            logger.LogWarning("Removing stale tunnel: {name}", staleName);
+            RunElevated(WgTunnelExe, $"/uninstalltunnelservice {staleName}");
+            await Task.Delay(500);
+            RunCommand("sc.exe", $"delete WireGuardTunnel${staleName}");
+        }
+        if (staleNames.Count > 0)
+        {
+            // Remove all stale Wintun adapters
+            var adapterCleanup = string.Join(";", staleNames.Select(n =>
+                $"Get-NetAdapter -Name '{n}' -EA SilentlyContinue | Remove-NetAdapter -Confirm:$false -EA SilentlyContinue"));
+            RunCommand("powershell.exe", $"-NonInteractive -Command \"{adapterCleanup}\"");
+            await Task.Delay(500);
+        }
+
         // Remove any leftover Wintun network adapter with same name
         // (Wintun exit code 2 = adapter creation failed because old one still registered)
         RunCommand("powershell.exe",
