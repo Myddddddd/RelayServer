@@ -32,6 +32,28 @@ app = FastAPI(title="WireGuard Dashboard", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 security = HTTPBearer(auto_error=False)
 
+# ─── IPv6 Detection (cached at first call) ────────────────────
+_server_ipv6: str | None = None
+_ipv6_detected: bool = False
+
+def get_server_ipv6() -> str | None:
+    """Detect and cache the server's public IPv6 address."""
+    global _server_ipv6, _ipv6_detected
+    if _ipv6_detected:
+        return _server_ipv6
+    try:
+        result = subprocess.run(
+            ["curl", "-6", "-s", "--max-time", "5", "ifconfig.me"],
+            capture_output=True, text=True, timeout=7
+        )
+        addr = result.stdout.strip()
+        _server_ipv6 = addr if addr and ":" in addr else None
+    except Exception:
+        _server_ipv6 = None
+    finally:
+        _ipv6_detected = True
+    return _server_ipv6
+
 # ─── Database ─────────────────────────────────────────────────
 def get_db():
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
@@ -297,12 +319,17 @@ def change_password(target_username: str, req: ChangePasswordRequest, username: 
 @app.get("/api/server-info")
 def server_info():
     """Get server public key and info - used by clients during setup"""
-    return {
+    server_ip = os.environ.get("SERVER_IP", "103.126.161.38")
+    ipv6 = get_server_ipv6()
+    result = {
         "server_public_key": get_server_pubkey(),
-        "endpoint": f"{os.environ.get('SERVER_IP', '103.126.161.38')}:{LISTEN_PORT}",
+        "endpoint": f"{server_ip}:{LISTEN_PORT}",
         "vpn_subnet": VPN_SUBNET,
         "dns": SERVER_VPN_IP,
     }
+    if ipv6:
+        result["endpoint_ipv6"] = f"[{ipv6}]:{LISTEN_PORT}"
+    return result
 
 @app.get("/api/network/peers")
 def network_peers():
@@ -359,16 +386,17 @@ def poll_status(peer_id: str):
     if peer["status"] == "approved":
         server_pubkey = get_server_pubkey()
         server_ip = os.environ.get("SERVER_IP", "103.126.161.38")
-        return {
-            "status": "approved",
-            "config": {
-                "vpn_ip": peer["vpn_ip"],
-                "server_public_key": server_pubkey,
-                "server_endpoint": f"{server_ip}:{LISTEN_PORT}",
-                "dns": SERVER_VPN_IP,
-                "allowed_ips": VPN_SUBNET,
-            }
+        ipv6 = get_server_ipv6()
+        config_data = {
+            "vpn_ip": peer["vpn_ip"],
+            "server_public_key": server_pubkey,
+            "server_endpoint": f"{server_ip}:{LISTEN_PORT}",
+            "dns": SERVER_VPN_IP,
+            "allowed_ips": VPN_SUBNET,
         }
+        if ipv6:
+            config_data["server_endpoint_ipv6"] = f"[{ipv6}]:{LISTEN_PORT}"
+        return {"status": "approved", "config": config_data}
 
 @app.get("/api/config/{peer_id}")
 def get_config_file(peer_id: str):

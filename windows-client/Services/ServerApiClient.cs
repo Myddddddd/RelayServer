@@ -10,12 +10,14 @@ public record PollConfig(
     [property: JsonPropertyName("vpn_ip")] string VpnIp,
     [property: JsonPropertyName("server_public_key")] string ServerPublicKey,
     [property: JsonPropertyName("server_endpoint")] string ServerEndpoint,
+    [property: JsonPropertyName("server_endpoint_ipv6")] string? ServerEndpointIpv6,
     [property: JsonPropertyName("dns")] string Dns,
     [property: JsonPropertyName("allowed_ips")] string AllowedIps
 );
 public record ServerInfo(
     [property: JsonPropertyName("server_public_key")] string ServerPublicKey,
     [property: JsonPropertyName("endpoint")] string Endpoint,
+    [property: JsonPropertyName("endpoint_ipv6")] string? EndpointIpv6,
     [property: JsonPropertyName("vpn_subnet")] string VpnSubnet,
     [property: JsonPropertyName("dns")] string Dns
 );

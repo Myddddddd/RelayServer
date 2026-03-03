@@ -83,6 +83,7 @@ api.MapGet("/status", (ConfigStore config, WireGuardManager wg) =>
         bypassDomains = cfg.BypassDomains,
         autoConnect = cfg.AutoConnect,
         runAtStartup = IsInStartup(),
+        serverEndpoint = cfg.ServerEndpoint,
     };
 });
 

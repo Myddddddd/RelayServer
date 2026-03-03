@@ -221,6 +221,7 @@ function renderStatus(s) {
     <div class="info-row"><span class="info-label">Device</span><span class="info-value">${s.deviceName}</span></div>
     <div class="info-row"><span class="info-label">Approval</span><span class="info-value"><span class="status-badge ${statusClass}">${s.approvalStatus || 'not registered'}</span></span></div>
     <div class="info-row"><span class="info-label">VPN IP</span><span class="info-value">${s.vpnIp || '-'}</span></div>
+    <div class="info-row"><span class="info-label">Endpoint</span><span class="info-value" style="font-size:11px">${s.serverEndpoint ? (s.serverEndpoint.includes('[') ? '🌐 IPv6: ' + s.serverEndpoint : '🔵 IPv4: ' + s.serverEndpoint) : '-'}</span></div>
     <div class="info-row"><span class="info-label">Public Key</span><span class="info-value" style="font-size:11px">${s.publicKey || 'Not generated'}</span></div>
   `;
   
