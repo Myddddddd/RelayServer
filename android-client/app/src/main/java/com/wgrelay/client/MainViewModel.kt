@@ -29,6 +29,7 @@ data class UiState(
     val bypassDomains: String = "",
     val errorMessage: String = "",
     val autoConnect: Boolean = false,
+    val mtu: Int = 0,
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -68,6 +69,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             deviceName = config.deviceName,
             bypassDomains = config.bypassDomains,
             autoConnect = config.autoConnect,
+            mtu = config.mtu,
             statusMessage = stateMessage(state, config.vpnIp),
         )
 
@@ -192,6 +194,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             putExtra(WireGuardVpnService.EXTRA_SERVER_ENDPOINT, config.serverEndpoint)
             putExtra(WireGuardVpnService.EXTRA_VPN_SUBNET, config.vpnSubnet)
             putExtra(WireGuardVpnService.EXTRA_BYPASS_DOMAINS, config.bypassDomains)
+            putExtra(WireGuardVpnService.EXTRA_MTU, config.mtu)
         }
         context.startService(intent)
 
@@ -218,6 +221,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val config = configStore.configFlow.first()
         configStore.save(config.copy(bypassDomains = domains))
         _uiState.value = _uiState.value.copy(bypassDomains = domains)
+    }
+
+    fun saveMtu(mtu: Int) = viewModelScope.launch {
+        val config = configStore.configFlow.first()
+        configStore.save(config.copy(mtu = mtu))
+        _uiState.value = _uiState.value.copy(mtu = mtu)
     }
 
     fun saveAutoConnect(enabled: Boolean) = viewModelScope.launch {

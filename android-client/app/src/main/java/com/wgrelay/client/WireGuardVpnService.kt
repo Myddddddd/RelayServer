@@ -29,6 +29,7 @@ class WireGuardVpnService : VpnService() {
         const val EXTRA_SERVER_ENDPOINT = "server_endpoint"
         const val EXTRA_VPN_SUBNET = "vpn_subnet"
         const val EXTRA_BYPASS_DOMAINS = "bypass_domains"
+        const val EXTRA_MTU = "mtu"
         const val NOTIFICATION_ID = 1001
         const val CHANNEL_ID = "wgrelay_vpn"
         var isRunning = false
@@ -51,9 +52,10 @@ class WireGuardVpnService : VpnService() {
                 val serverEndpoint = intent.getStringExtra(EXTRA_SERVER_ENDPOINT) ?: return START_NOT_STICKY
                 val vpnSubnet = intent.getStringExtra(EXTRA_VPN_SUBNET) ?: "10.0.0.0/24"
                 val bypassDomains = intent.getStringExtra(EXTRA_BYPASS_DOMAINS) ?: ""
+                val mtu = intent.getIntExtra(EXTRA_MTU, 0)
 
                 startForeground(NOTIFICATION_ID, createNotification("Connecting..."))
-                Thread { connect(vpnIp, privateKey, serverPubKey, serverEndpoint, vpnSubnet, bypassDomains) }.start()
+                Thread { connect(vpnIp, privateKey, serverPubKey, serverEndpoint, vpnSubnet, bypassDomains, mtu) }.start()
             }
             ACTION_DISCONNECT -> {
                 disconnect()
@@ -70,6 +72,7 @@ class WireGuardVpnService : VpnService() {
         serverEndpoint: String,
         vpnSubnet: String,
         bypassDomains: String,
+        mtu: Int = 0,
     ) {
         try {
             val privKey = Key.fromBase64(privateKey)
@@ -79,6 +82,7 @@ class WireGuardVpnService : VpnService() {
             val ifaceBuilder = Interface.Builder().apply {
                 setKeyPair(KeyPair(privKey))
                 addAddress(InetNetwork.parse("$vpnIp/24"))
+                if (mtu > 0) setMtu(mtu)
                 // NOTE: No DNS override — keep system DNS to avoid breaking internet
             }
 

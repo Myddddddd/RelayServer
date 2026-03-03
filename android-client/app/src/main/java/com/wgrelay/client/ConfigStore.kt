@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -25,6 +26,7 @@ data class AppConfig(
     val vpnSubnet: String = "10.0.0.0/24",
     val bypassDomains: String = "",  // newline-separated
     val autoConnect: Boolean = false,
+    val mtu: Int = 0,  // 0 = WireGuard default (1420)
 )
 
 class ConfigStore(private val context: Context) {
@@ -42,6 +44,7 @@ class ConfigStore(private val context: Context) {
         val VPN_SUBNET = stringPreferencesKey("vpn_subnet")
         val BYPASS_DOMAINS = stringPreferencesKey("bypass_domains")
         val AUTO_CONNECT = booleanPreferencesKey("auto_connect")
+        val MTU = intPreferencesKey("mtu")
     }
 
     val configFlow: Flow<AppConfig> = context.dataStore.data.map { prefs ->
@@ -58,6 +61,7 @@ class ConfigStore(private val context: Context) {
             vpnSubnet = prefs[Keys.VPN_SUBNET] ?: "10.0.0.0/24",
             bypassDomains = prefs[Keys.BYPASS_DOMAINS] ?: "",
             autoConnect = prefs[Keys.AUTO_CONNECT] ?: false,
+            mtu = prefs[Keys.MTU] ?: 0,
         )
     }
 
@@ -75,6 +79,7 @@ class ConfigStore(private val context: Context) {
             prefs[Keys.VPN_SUBNET] = config.vpnSubnet
             prefs[Keys.BYPASS_DOMAINS] = config.bypassDomains
             prefs[Keys.AUTO_CONNECT] = config.autoConnect
+            prefs[Keys.MTU] = config.mtu
         }
     }
 }

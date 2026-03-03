@@ -5,6 +5,7 @@ import android.net.VpnService
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
+import android.view.inputmethod.EditorInfo
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -61,6 +62,21 @@ class MainActivity : AppCompatActivity() {
             val domains = binding.etDomains.text.toString()
             viewModel.saveDomains(domains)
             Toast.makeText(this, "Domains saved. Will apply on next connect.", Toast.LENGTH_SHORT).show()
+        }
+
+        // Save MTU when user finishes editing
+        binding.etMtu.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) {
+                val mtu = binding.etMtu.text.toString().toIntOrNull() ?: 0
+                viewModel.saveMtu(mtu)
+            }
+        }
+        binding.etMtu.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                val mtu = binding.etMtu.text.toString().toIntOrNull() ?: 0
+                viewModel.saveMtu(mtu)
+            }
+            false
         }
     }
 
@@ -120,6 +136,10 @@ class MainActivity : AppCompatActivity() {
             binding.etDeviceName.setText(state.deviceName)
         if (binding.etDomains.text.isEmpty() && state.bypassDomains.isNotEmpty())
             binding.etDomains.setText(state.bypassDomains)
+
+        // Restore MTU (only if not focused to avoid disrupting user input)
+        if (!binding.etMtu.isFocused)
+            binding.etMtu.setText(if (state.mtu > 0) state.mtu.toString() else "")
 
         // Auto-connect switch (update without re-triggering listener)
         binding.switchAutoConnect.setOnCheckedChangeListener(null)

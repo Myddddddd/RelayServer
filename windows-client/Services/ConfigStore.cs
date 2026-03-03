@@ -17,6 +17,7 @@ public class AppConfig
     public string VpnSubnet { get; set; } = "10.0.0.0/24";
     public List<string> BypassDomains { get; set; } = [];
     public bool AutoConnect { get; set; } = false;
+    public int Mtu { get; set; } = 0; // 0 = use WireGuard default (1420)
 }
 
 public class ConfigStore

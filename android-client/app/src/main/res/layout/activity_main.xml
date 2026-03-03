@@ -217,6 +217,51 @@
 
         </LinearLayout>
 
+        <!-- MTU Setting -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="24dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="MTU"
+                    android:textColor="#C9D1D9"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0 = default (1420). Try 1280 if poor connection."
+                    android:textColor="#6E7681"
+                    android:textSize="11sp" />
+
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/etMtu"
+                android:layout_width="80dp"
+                android:layout_height="40dp"
+                android:hint="0"
+                android:inputType="number"
+                android:textColor="#E1E4E8"
+                android:textColorHint="#6E7681"
+                android:textSize="13sp"
+                android:gravity="center"
+                android:background="@drawable/edit_text_bg"
+                android:padding="8dp" />
+
+        </LinearLayout>
+
         <!-- Domain Routing -->
         <View
             android:layout_width="match_parent"

@@ -120,6 +120,12 @@
       <input type="checkbox" id="runAtStartup" style="width:16px;height:16px;cursor:pointer">
       <label for="runAtStartup" style="margin:0;cursor:pointer;color:#c9d1d9;font-size:13px">Run at Windows startup</label>
     </div>
+    <div style="margin-top:12px;display:flex;align-items:center;gap:8px">
+      <label style="margin:0;color:#8b949e;font-size:13px;white-space:nowrap">MTU:</label>
+      <input type="number" id="mtuInput" min="0" max="9000" placeholder="0 = default (1420)"
+        style="width:160px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:6px;padding:4px 8px;font-size:13px">
+      <span style="color:#6e7681;font-size:11px">Set 0 for WireGuard default. Try 1280–1420 if you have packet loss.</span>
+    </div>
     <div class="btn-row">
       <button class="btn btn-primary" onclick="setupAndRegister()">Register Device</button>
       <button class="btn btn-secondary" onclick="saveSettings()" style="font-size:13px">Save Settings</button>
@@ -235,6 +241,9 @@ function renderStatus(s) {
   if (acBox && !acBox._userChanged) acBox.checked = s.autoConnect === true;
   const rsBox = document.getElementById('runAtStartup');
   if (rsBox && !rsBox._userChanged) rsBox.checked = s.runAtStartup === true;
+  // Sync MTU input
+  const mtuInput = document.getElementById('mtuInput');
+  if (mtuInput && !mtuInput._userChanged) mtuInput.value = s.mtu || 0;
   
   // Fill domain list
   if (s.bypassDomains?.length > 0 && !document.getElementById('domainList').value)
@@ -264,13 +273,14 @@ function renderStatus(s) {
 async function saveSettings() {
   const autoConnect = document.getElementById('autoConnect').checked;
   const runAtStartup = document.getElementById('runAtStartup').checked;
+  const mtu = parseInt(document.getElementById('mtuInput').value) || 0;
   document.getElementById('autoConnect')._userChanged = true;
   document.getElementById('runAtStartup')._userChanged = true;
   try {
     await fetch(`${API}/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ autoConnect, runAtStartup })
+      body: JSON.stringify({ autoConnect, runAtStartup, mtu })
     });
     const d = document.getElementById('setupMsg');
     d.innerHTML = '<div style="color:#3fb950;font-size:13px;margin-top:8px">✅ Settings saved.</div>';

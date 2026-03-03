@@ -172,10 +172,11 @@ public class WireGuardManager(ILogger<WireGuardManager> logger)
     private static string BuildWgConfig(AppConfig config)
     {
         // AllowedIPs: route only VPN subnet → no full-tunnel, system DNS is preserved
+        var mtuLine = config.Mtu > 0 ? $"\nMTU = {config.Mtu}" : "";
         return $"""
             [Interface]
             PrivateKey = {config.PrivateKey}
-            Address = {config.VpnIp}/24
+            Address = {config.VpnIp}/24{mtuLine}
 
             [Peer]
             PublicKey = {config.ServerPublicKey}
