@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -134,11 +136,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val poll = apiClient.poll(config.serverUrl, config.peerId)
             if (poll.status == "approved" && poll.config != null) {
+                // Auto-prefer IPv6 if server exposes it and device has IPv6 connectivity
+                val endpoint = if (!poll.config.serverEndpointIpv6.isNullOrEmpty()) {
+                    val hasIpv6 = withContext(Dispatchers.IO) { apiClient.checkIpv6Connectivity() }
+                    if (hasIpv6) poll.config.serverEndpointIpv6 ?: poll.config.serverEndpoint else poll.config.serverEndpoint
+                } else {
+                    poll.config.serverEndpoint
+                }
+
                 val updated = config.copy(
                     approvalStatus = "approved",
                     vpnIp = poll.config.vpnIp,
                     serverPublicKey = poll.config.serverPublicKey,
-                    serverEndpoint = poll.config.serverEndpoint,
+                    serverEndpoint = endpoint,
                     vpnSubnet = poll.config.allowedIps,
                 )
                 configStore.save(updated)

@@ -12,6 +12,7 @@ data class PollConfig(
     val vpnIp: String,
     val serverPublicKey: String,
     val serverEndpoint: String,
+    val serverEndpointIpv6: String? = null,
     val dns: String,
     val allowedIps: String,
 )
@@ -76,6 +77,7 @@ class ServerApiClient {
                 vpnIp = cfg.getString("vpn_ip"),
                 serverPublicKey = cfg.getString("server_public_key"),
                 serverEndpoint = cfg.getString("server_endpoint"),
+                serverEndpointIpv6 = cfg.optString("server_endpoint_ipv6").takeIf { it.isNotEmpty() },
                 dns = cfg.getString("dns"),
                 allowedIps = cfg.getString("allowed_ips"),
             )
@@ -91,5 +93,25 @@ class ServerApiClient {
         val body = response.body?.string() ?: throw Exception("Empty response")
         if (!response.isSuccessful) throw Exception("Failed: $body")
         return JSONObject(body)
+    }
+
+    /**
+     * Tests if this device has working IPv6 internet connectivity
+     * by trying to reach an IPv6-only HTTP endpoint.
+     */
+    fun checkIpv6Connectivity(): Boolean {
+        return try {
+            val ipv6Client = OkHttpClient.Builder()
+                .connectTimeout(5, TimeUnit.SECONDS)
+                .readTimeout(5, TimeUnit.SECONDS)
+                .build()
+            val req = Request.Builder()
+                .url("https://ipv6.icanhazip.com")
+                .build()
+            val resp = ipv6Client.newCall(req).execute()
+            resp.isSuccessful
+        } catch (_: Exception) {
+            false
+        }
     }
 }
