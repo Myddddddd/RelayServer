@@ -1,18 +1,34 @@
 using WgClient.Services;
 using Microsoft.Win32;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+
+try
+{
+StartupLog.Init();
+
+// ─── Check Admin ───────────────────────────────────────────────────────
+bool isAdmin = new WindowsPrincipal(WindowsIdentity.GetCurrent())
+    .IsInRole(WindowsBuiltInRole.Administrator);
+StartupLog.Write($"IsAdmin: {isAdmin}");
+StartupLog.Write($"OS: {Environment.OSVersion}");
+StartupLog.Write($"Arch: {RuntimeInformation.OSArchitecture}");
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Windows Service support — runs silently as a service
+StartupLog.Write("Configuring Host...");
 builder.Host.UseWindowsService(options =>
 {
     options.ServiceName = "WireGuard Relay Client";
 });
 
 // Use fixed URL for local web UI  
+StartupLog.Write("Binding to http://localhost:7432...");
 builder.WebHost.UseUrls("http://localhost:7432");
 
 // Register services
+StartupLog.Write("Registering services...");
 builder.Services.AddSingleton<ConfigStore>();
 builder.Services.AddSingleton<WireGuardManager>();
 builder.Services.AddSingleton<ServerApiClient>();
@@ -44,6 +60,7 @@ if (args.Contains("--startup:remove"))
 }
 
 var app = builder.Build();
+StartupLog.Write("App built. Starting pipeline...");
 app.UseCors();
 
 // ─── Local API Endpoints ──────────────────────────────────────────────
@@ -312,9 +329,19 @@ app.MapFallback(async context =>
     await context.Response.WriteAsync(html);
 });
 
+StartupLog.Write("Starting web server on http://localhost:7432 ...");
 app.Run();
 
-// ─── Helper Methods ───────────────────────────────────────────────────
+} // end try
+catch (Exception ex)
+{
+    var msg = $"STARTUP CRASH:\n{ex.GetType().Name}: {ex.Message}\n\nStack:\n{ex.StackTrace}";
+    StartupLog.Write(msg);
+    System.Windows.Forms.MessageBox.Show(msg, "WgClient Startup Error",
+        System.Windows.Forms.MessageBoxButtons.OK,
+        System.Windows.Forms.MessageBoxIcon.Error);
+}
+
 static string GetEmbeddedHtml()
 {
     var asm = typeof(Program).Assembly;
@@ -379,3 +406,24 @@ static bool IsInStartup()
 record SetupRequest(string ServerUrl, string DeviceName);
 record DomainsRequest(List<string>? Domains);
 record SettingsRequest(bool AutoConnect, bool RunAtStartup);
+// ─── Startup Diagnostics Logger ─────────────────────────────
+static class StartupLog
+{
+    static readonly string LogPath = Path.Combine(Path.GetTempPath(), "WgClient-startup.log");
+
+    public static void Init()
+    {
+        File.WriteAllText(LogPath,
+            $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] WgClient starting...\r\n");
+    }
+
+    public static void Write(string msg)
+    {
+        try
+        {
+            File.AppendAllText(LogPath,
+                $"[{DateTime.Now:HH:mm:ss.fff}] {msg}\r\n");
+        }
+        catch { /* don't crash trying to log */ }
+    }
+}
