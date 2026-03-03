@@ -243,6 +243,42 @@ api.MapPost("/force-cleanup", async () =>
     return Results.Ok(new { steps = results, message = "Cleanup done. Try Connect again." });
 });
 
+// Remove all WireGuard tunnel services except 'wgrelay' (fixes routing conflicts)
+api.MapPost("/clear-stale-tunnels", async () =>
+{
+    var wgTunnel = @"C:\Program Files\WireGuard\wireguard.exe";
+    const string keepName = "wgrelay";
+    var removed = new List<string>();
+
+    string RunAndCapture(string exe, string args)
+    {
+        var proc = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        { FileName = exe, Arguments = args, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true });
+        proc?.WaitForExit(5000);
+        return proc?.StandardOutput.ReadToEnd() + proc?.StandardError.ReadToEnd() ?? "";
+    }
+
+    var allSvcs = RunAndCapture("sc.exe", "query type=all");
+    var staleNames = allSvcs.Split('\n')
+        .Where(l => l.TrimStart().StartsWith("SERVICE_NAME: WireGuardTunnel$"))
+        .Select(l => l.Trim().Replace("SERVICE_NAME: WireGuardTunnel$", "").Trim())
+        .Where(n => n != keepName)
+        .ToList();
+
+    foreach (var name in staleNames)
+    {
+        if (File.Exists(wgTunnel)) RunAndCapture(wgTunnel, $"/uninstalltunnelservice {name}");
+        await Task.Delay(500);
+        RunAndCapture("sc.exe", $"delete WireGuardTunnel${name}");
+        RunAndCapture("powershell.exe",
+            $"-NonInteractive -Command \"Get-NetAdapter -Name '{name}' -EA SilentlyContinue | Remove-NetAdapter -Confirm:$false -EA SilentlyContinue\"");
+        removed.Add(name);
+    }
+    await Task.Delay(500);
+
+    return Results.Ok(new { removed, message = removed.Count > 0 ? $"Removed {removed.Count} stale tunnel(s). Routing should be clean now." : "No stale tunnels found." });
+});
+
 // Get server info
 api.MapGet("/server-info", async (ConfigStore config, ServerApiClient apiClient) =>
 {

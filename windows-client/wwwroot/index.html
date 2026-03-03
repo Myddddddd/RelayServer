@@ -101,6 +101,7 @@
     <div id="diagArea" style="margin-top:8px;font-size:12px;color:#8b949e"></div>
     <div style="margin-top:12px">
       <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px" onclick="forceCleanup()" title="Remove stuck WireGuard adapter/service">🔧 Force Cleanup</button>
+      <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;margin-left:8px" onclick="clearStaleTunnels()" title="Remove conflicting WireGuard tunnels from other sessions">🧹 Clear Stale Tunnels</button>
     </div>
   </div>
 
@@ -311,6 +312,22 @@ async function forceCleanup() {
     document.getElementById('msgArea').innerHTML = '<div class="alert alert-success">✅ Cleanup complete. Click Connect to try again.</div>';
   } catch(e) {
     document.getElementById('msgArea').innerHTML = `<div class="alert alert-error">Cleanup error: ${e.message}</div>`;
+  }
+  loadStatus();
+}
+
+async function clearStaleTunnels() {
+  const msgArea = document.getElementById('msgArea');
+  msgArea.innerHTML = '<div class="alert alert-warn">🔍 Scanning for stale tunnels...</div>';
+  try {
+    const r = await fetch(`${API}/clear-stale-tunnels`, { method: 'POST' });
+    const d = await r.json();
+    const msg = d.removed?.length > 0
+      ? `✅ Removed stale tunnels: ${d.removed.join(', ')}. You can reconnect now.`
+      : `✅ ${d.message}`;
+    msgArea.innerHTML = `<div class="alert alert-success">${msg}</div>`;
+  } catch(e) {
+    msgArea.innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
   }
   loadStatus();
 }
