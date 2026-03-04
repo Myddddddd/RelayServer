@@ -24,4 +24,14 @@
   <ItemGroup>
     <EmbeddedResource Include="wwwroot\**\*" />
   </ItemGroup>
+
+  <!-- Exclude publish output folders from project content -->
+  <ItemGroup>
+    <Content Remove="publish\**" />
+    <Content Remove="publish2\**" />
+    <Content Remove="publish3\**" />
+    <None Remove="publish\**" />
+    <None Remove="publish2\**" />
+    <None Remove="publish3\**" />
+  </ItemGroup>
 </Project>
