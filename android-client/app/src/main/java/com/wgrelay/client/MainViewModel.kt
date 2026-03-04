@@ -180,11 +180,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun connect(vpnPermissionGranted: Boolean = true) = viewModelScope.launch {
         if (!vpnPermissionGranted) return@launch
 
-        val config = configStore.configFlow.first()
+        var config = configStore.configFlow.first()
         if (config.approvalStatus != "approved") {
             _uiState.value = _uiState.value.copy(errorMessage = "Not approved yet")
             return@launch
         }
+
+        // Re-fetch fresh endpoint from server before connecting (handles server IP changes)
+        try {
+            val poll = apiClient.poll(config.serverUrl, config.peerId)
+            if (poll.status == "approved" && poll.config != null) {
+                val endpoint = if (!poll.config.serverEndpointIpv6.isNullOrEmpty()) {
+                    val hasIpv6 = withContext(Dispatchers.IO) { apiClient.checkIpv6Connectivity() }
+                    if (hasIpv6) poll.config.serverEndpointIpv6 ?: poll.config.serverEndpoint else poll.config.serverEndpoint
+                } else {
+                    poll.config.serverEndpoint
+                }
+                config = config.copy(
+                    serverPublicKey = poll.config.serverPublicKey,
+                    serverEndpoint = endpoint,
+                    vpnIp = poll.config.vpnIp,
+                    vpnSubnet = poll.config.allowedIps,
+                )
+                configStore.save(config)
+            }
+        } catch (_: Exception) { /* Use cached config if server unreachable */ }
 
         val intent = Intent(context, WireGuardVpnService::class.java).apply {
             action = WireGuardVpnService.ACTION_CONNECT

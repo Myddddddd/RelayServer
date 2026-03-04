@@ -143,11 +143,44 @@ api.MapPost("/settings", (SettingsRequest req, ConfigStore config) =>
 });
 
 // Connect/Disconnect tunnel
-api.MapPost("/connect", async (ConfigStore config, WireGuardManager wg) =>
+api.MapPost("/connect", async (ConfigStore config, WireGuardManager wg, ServerApiClient apiClient) =>
 {
     var cfg = config.Load();
     if (cfg.ApprovalStatus != "approved")
         return Results.BadRequest(new { error = "Not approved by server yet" });
+
+    // Always re-fetch fresh endpoint from server before connecting
+    // This handles server IP changes (e.g. VPS migration) without re-registration
+    try
+    {
+        var poll = await apiClient.PollAsync(cfg.ServerUrl, cfg.PeerId);
+        if (poll.Status == "approved" && poll.Config != null)
+        {
+            cfg.ServerPublicKey = poll.Config.ServerPublicKey;
+            cfg.VpnIp = poll.Config.VpnIp;
+            cfg.VpnSubnet = poll.Config.AllowedIps;
+            // Prefer IPv6 endpoint if available and client has IPv6
+            if (!string.IsNullOrEmpty(poll.Config.ServerEndpointIpv6))
+            {
+                try
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                    using var http = new HttpClient();
+                    var r = await http.GetAsync("https://ipv6.icanhazip.com", cts.Token);
+                    cfg.ServerEndpoint = r.IsSuccessStatusCode
+                        ? poll.Config.ServerEndpointIpv6
+                        : poll.Config.ServerEndpoint;
+                }
+                catch { cfg.ServerEndpoint = poll.Config.ServerEndpoint; }
+            }
+            else
+            {
+                cfg.ServerEndpoint = poll.Config.ServerEndpoint;
+            }
+            config.Save(cfg);
+        }
+    }
+    catch { /* Use cached config if server unreachable */ }
 
     try
     {
