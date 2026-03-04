@@ -42,6 +42,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     private var pollingJob: kotlinx.coroutines.Job? = null
+    private var refreshJob: kotlinx.coroutines.Job? = null
 
     init {
         loadInitialState()
@@ -53,7 +54,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         val state = when {
             isConnected -> AppState.CONNECTED
-            config.approvalStatus == "approved" -> AppState.APPROVED
+            config.approvalStatus == "approved" -> {
+                startEndpointRefreshPolling() // Keep endpoint always fresh
+                AppState.APPROVED
+            }
             config.approvalStatus == "pending" -> {
                 startPolling()
                 AppState.PENDING_APPROVAL
@@ -131,6 +135,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * After a device is approved, refresh the endpoint every 30 seconds.
+     * This handles VPS IP changes without requiring re-registration.
+     */
+    private fun startEndpointRefreshPolling() {
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
+            while (isActive) {
+                delay(30_000)
+                refreshEndpoint()
+            }
+        }
+    }
+
+    private suspend fun refreshEndpoint() {
+        val config = configStore.configFlow.first()
+        if (config.peerId.isEmpty() || config.serverUrl.isEmpty()) return
+        try {
+            val poll = apiClient.poll(config.serverUrl, config.peerId)
+            if (poll.status == "approved" && poll.config != null) {
+                val endpoint = if (!poll.config.serverEndpointIpv6.isNullOrEmpty()) {
+                    val hasIpv6 = withContext(Dispatchers.IO) { apiClient.checkIpv6Connectivity() }
+                    if (hasIpv6) poll.config.serverEndpointIpv6 ?: poll.config.serverEndpoint else poll.config.serverEndpoint
+                } else {
+                    poll.config.serverEndpoint
+                }
+                if (config.serverEndpoint != endpoint || config.serverPublicKey != poll.config.serverPublicKey) {
+                    configStore.save(config.copy(
+                        serverEndpoint = endpoint,
+                        serverPublicKey = poll.config.serverPublicKey,
+                        vpnSubnet = poll.config.allowedIps,
+                    ))
+                }
+            }
+        } catch (_: Exception) { /* Ignore if server unreachable */ }
+    }
+
     private suspend fun checkApproval() {
         val config = configStore.configFlow.first()
         if (config.peerId.isEmpty() || config.serverUrl.isEmpty()) return
@@ -155,6 +196,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 configStore.save(updated)
                 pollingJob?.cancel()
+                startEndpointRefreshPolling() // Start 30s refresh loop after first approval
                 _uiState.value = _uiState.value.copy(
                     appState = AppState.APPROVED,
                     vpnIp = poll.config.vpnIp,
