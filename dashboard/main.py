@@ -32,9 +32,34 @@ app = FastAPI(title="WireGuard Dashboard", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 security = HTTPBearer(auto_error=False)
 
-# ─── IPv6 Detection (cached at first call) ────────────────────
+# ─── Public IP Detection (cached at first call) ──────────────────────
 _server_ipv6: str | None = None
 _ipv6_detected: bool = False
+_server_ip_cache: str | None = None
+_ip_detected: bool = False
+
+def get_server_ip() -> str:
+    """Return this server's public IPv4. Uses SERVER_IP env var if set, else auto-detects."""
+    global _server_ip_cache, _ip_detected
+    if _ip_detected and _server_ip_cache:
+        return _server_ip_cache
+    env_ip = os.environ.get("SERVER_IP", "").strip()
+    if env_ip:
+        _server_ip_cache = env_ip
+        _ip_detected = True
+        return _server_ip_cache
+    try:
+        result = subprocess.run(
+            ["curl", "-4", "-s", "--max-time", "5", "ifconfig.me"],
+            capture_output=True, text=True, timeout=7
+        )
+        addr = result.stdout.strip()
+        _server_ip_cache = addr if addr else "127.0.0.1"
+    except Exception:
+        _server_ip_cache = "127.0.0.1"
+    finally:
+        _ip_detected = True
+    return _server_ip_cache
 
 def get_server_ipv6() -> str | None:
     """Detect and cache the server's public IPv6 address."""
@@ -319,7 +344,7 @@ def change_password(target_username: str, req: ChangePasswordRequest, username: 
 @app.get("/api/server-info")
 def server_info():
     """Get server public key and info - used by clients during setup"""
-    server_ip = os.environ.get("SERVER_IP", "103.126.161.38")
+    server_ip = get_server_ip()
     ipv6 = get_server_ipv6()
     result = {
         "server_public_key": get_server_pubkey(),
@@ -385,7 +410,7 @@ def poll_status(peer_id: str):
     
     if peer["status"] == "approved":
         server_pubkey = get_server_pubkey()
-        server_ip = os.environ.get("SERVER_IP", "103.126.161.38")
+        server_ip = get_server_ip()
         ipv6 = get_server_ipv6()
         config_data = {
             "vpn_ip": peer["vpn_ip"],
@@ -409,7 +434,7 @@ def get_config_file(peer_id: str):
         raise HTTPException(status_code=403, detail="Not approved")
     
     server_pubkey = get_server_pubkey()
-    server_ip = os.environ.get("SERVER_IP", "103.126.161.38")
+    server_ip = get_server_ip()
     
     config = f"""[Interface]
 Address = {peer["vpn_ip"]}/24
