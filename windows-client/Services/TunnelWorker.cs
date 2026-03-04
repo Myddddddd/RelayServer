@@ -95,6 +95,30 @@ public class TunnelWorker(
         {
             _pollInterval = TimeSpan.FromSeconds(30);
 
+            // Refresh endpoint from server (keeps endpoint current if server IP changes)
+            try
+            {
+                var refreshPoll = await apiClient.PollAsync(cfg.ServerUrl, cfg.PeerId);
+                if (refreshPoll.Status == "approved" && refreshPoll.Config != null)
+                {
+                    string freshEndpoint = refreshPoll.Config.ServerEndpoint;
+                    if (!string.IsNullOrEmpty(refreshPoll.Config.ServerEndpointIpv6))
+                    {
+                        if (await CheckIpv6ConnectivityAsync())
+                            freshEndpoint = refreshPoll.Config.ServerEndpointIpv6;
+                    }
+                    if (cfg.ServerEndpoint != freshEndpoint || cfg.ServerPublicKey != refreshPoll.Config.ServerPublicKey)
+                    {
+                        logger.LogInformation("Endpoint refreshed: {old} → {new}", cfg.ServerEndpoint, freshEndpoint);
+                        cfg.ServerEndpoint = freshEndpoint;
+                        cfg.ServerPublicKey = refreshPoll.Config.ServerPublicKey;
+                        cfg.VpnSubnet = refreshPoll.Config.AllowedIps;
+                        config.Save(cfg);
+                    }
+                }
+            }
+            catch { /* Ignore if server unreachable during refresh */ }
+
             // Auto-connect if enabled and not yet connected
             if (cfg.AutoConnect && !wg.IsConnected())
             {

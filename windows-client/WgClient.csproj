@@ -30,8 +30,10 @@
     <Content Remove="publish\**" />
     <Content Remove="publish2\**" />
     <Content Remove="publish3\**" />
+    <Content Remove="release\**" />
     <None Remove="publish\**" />
     <None Remove="publish2\**" />
     <None Remove="publish3\**" />
+    <None Remove="release\**" />
   </ItemGroup>
 </Project>

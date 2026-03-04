@@ -4,6 +4,7 @@ obj/
 publish/
 publish2/
 publish3/
+release/
 *.user
 
 # ─── IDE ─────────────────────────────────────────────────────────
