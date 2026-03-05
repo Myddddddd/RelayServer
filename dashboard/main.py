@@ -62,10 +62,31 @@ def get_server_ip() -> str:
     return _server_ip_cache
 
 def get_server_ipv6() -> str | None:
-    """Detect and cache the server's public IPv6 address."""
+    """Detect and cache the server's public IPv6 address.
+    Strategy: use local 'ip -6 addr' first (instant, no network), curl as fallback.
+    """
     global _server_ipv6, _ipv6_detected
     if _ipv6_detected:
         return _server_ipv6
+    # Strategy 1: read IPv6 from network interfaces directly (no external call)
+    try:
+        result = subprocess.run(
+            ["ip", "-6", "addr", "show", "scope", "global"],
+            capture_output=True, text=True, timeout=3
+        )
+        import re
+        addrs = re.findall(r"inet6\s+([0-9a-f:]+)/", result.stdout)
+        # Filter out private/ULA (fc/fd) and link-local (fe80)
+        public = [a for a in addrs
+                  if not a.startswith("fe80") and not a.startswith("fc")
+                  and not a.startswith("fd") and a != "::1"]
+        if public:
+            _server_ipv6 = public[0]
+            _ipv6_detected = True
+            return _server_ipv6
+    except Exception:
+        pass
+    # Strategy 2: curl fallback
     try:
         result = subprocess.run(
             ["curl", "-6", "-s", "--max-time", "5", "ifconfig.me"],
@@ -355,6 +376,18 @@ def server_info():
     if ipv6:
         result["endpoint_ipv6"] = f"[{ipv6}]:{LISTEN_PORT}"
     return result
+
+@app.post("/api/admin/refresh-server-ip")
+def refresh_server_ip(_: str = Depends(require_admin)):
+    """Admin: reset IP detection cache and re-detect."""
+    global _server_ip_cache, _ip_detected, _server_ipv6, _ipv6_detected
+    _ip_detected = False
+    _server_ip_cache = None
+    _ipv6_detected = False
+    _server_ipv6 = None
+    ipv4 = get_server_ip()
+    ipv6 = get_server_ipv6()
+    return {"ipv4": ipv4, "ipv6": ipv6}
 
 @app.get("/api/network/peers")
 def network_peers():

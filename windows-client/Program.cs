@@ -85,6 +85,7 @@ api.MapGet("/status", (ConfigStore config, WireGuardManager wg) =>
         runAtStartup = IsInStartup(),
         serverEndpoint = cfg.ServerEndpoint,
         mtu = cfg.Mtu,
+        useIPv6 = cfg.UseIPv6,
     };
 });
 
@@ -135,6 +136,7 @@ api.MapPost("/settings", (SettingsRequest req, ConfigStore config) =>
     var cfg = config.Load();
     cfg.AutoConnect = req.AutoConnect;
     cfg.Mtu = req.Mtu;
+    cfg.UseIPv6 = req.UseIPv6;
     config.Save(cfg);
     // Sync Windows startup registry
     if (req.RunAtStartup) AddToStartup();
@@ -477,7 +479,7 @@ static bool IsInStartup()
 // ─── Request/Response Models ──────────────────────────────────────────
 record SetupRequest(string ServerUrl, string DeviceName);
 record DomainsRequest(List<string>? Domains);
-record SettingsRequest(bool AutoConnect, bool RunAtStartup, int Mtu = 0);
+record SettingsRequest(bool AutoConnect, bool RunAtStartup, int Mtu = 0, bool UseIPv6 = false);
 // ─── Startup Diagnostics Logger ─────────────────────────────
 static class StartupLog
 {

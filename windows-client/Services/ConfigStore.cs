@@ -18,6 +18,7 @@ public class AppConfig
     public List<string> BypassDomains { get; set; } = [];
     public bool AutoConnect { get; set; } = false;
     public int Mtu { get; set; } = 0; // 0 = use WireGuard default (1420)
+    public bool UseIPv6 { get; set; } = false; // force IPv6 endpoint even if auto-detect fails
 }
 
 public class ConfigStore

@@ -1,5 +1,8 @@
 namespace WgClient.Services;
 
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
+
 /// <summary>
 /// Background worker that:
 /// 1. Polls the server for approval status when in "pending" state
@@ -11,7 +14,6 @@ public class TunnelWorker(
     ConfigStore config,
     ServerApiClient apiClient,
     WireGuardManager wg,
-    IHttpClientFactory httpFactory,
     ILogger<TunnelWorker> logger) : BackgroundService
 {
     private TimeSpan _pollInterval = TimeSpan.FromSeconds(5);
@@ -104,7 +106,8 @@ public class TunnelWorker(
                     string freshEndpoint = refreshPoll.Config.ServerEndpoint;
                     if (!string.IsNullOrEmpty(refreshPoll.Config.ServerEndpointIpv6))
                     {
-                        if (await CheckIpv6ConnectivityAsync())
+                        bool useIpv6 = cfg.UseIPv6 || await CheckIpv6ConnectivityAsync();
+                        if (useIpv6)
                             freshEndpoint = refreshPoll.Config.ServerEndpointIpv6;
                     }
                     if (cfg.ServerEndpoint != freshEndpoint || cfg.ServerPublicKey != refreshPoll.Config.ServerPublicKey)
@@ -130,21 +133,30 @@ public class TunnelWorker(
     }
 
     /// <summary>
-    /// Test IPv6 connectivity by trying to reach an IPv6-only endpoint.
-    /// Uses ipv6.icanhazip.com which only responds over IPv6.
+    /// Test IPv6 connectivity by checking if any network interface has
+    /// a global-scope (non-link-local, non-loopback) IPv6 address.
+    /// Instant local check — no HTTP required.
     /// </summary>
-    private async Task<bool> CheckIpv6ConnectivityAsync()
+    private Task<bool> CheckIpv6ConnectivityAsync()
     {
         try
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            var http = httpFactory.CreateClient();
-            var resp = await http.GetAsync("https://ipv6.icanhazip.com", cts.Token);
-            return resp.IsSuccessStatusCode;
+            var hasIPv6 = NetworkInterface.GetAllNetworkInterfaces()
+                .Where(nic => nic.OperationalStatus == OperationalStatus.Up
+                           && nic.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                .SelectMany(nic => nic.GetIPProperties().UnicastAddresses)
+                .Where(ua => ua.Address.AddressFamily == AddressFamily.InterNetworkV6)
+                .Any(ua =>
+                {
+                    var bytes = ua.Address.GetAddressBytes();
+                    // Exclude loopback (::1) and link-local (fe80::)
+                    return bytes[0] != 0xfe || (bytes[1] & 0xc0) != 0x80; // not fe80::/10
+                });
+            return Task.FromResult(hasIPv6);
         }
         catch
         {
-            return false;
+            return Task.FromResult(false);
         }
     }
 }

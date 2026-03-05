@@ -126,6 +126,11 @@
         style="width:160px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:6px;padding:4px 8px;font-size:13px">
       <span style="color:#6e7681;font-size:11px">Set 0 for WireGuard default. Try 1280–1420 if you have packet loss.</span>
     </div>
+    <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
+      <input type="checkbox" id="useIPv6" style="width:16px;height:16px;cursor:pointer">
+      <label for="useIPv6" style="margin:0;cursor:pointer;color:#c9d1d9;font-size:13px">Force IPv6 endpoint</label>
+      <span style="color:#6e7681;font-size:11px">(auto-detect usually works; enable only if IPv6 is not being used)</span>
+    </div>
     <div class="btn-row">
       <button class="btn btn-primary" onclick="setupAndRegister()">Register Device</button>
       <button class="btn btn-secondary" onclick="saveSettings()" style="font-size:13px">Save Settings</button>
@@ -244,6 +249,9 @@ function renderStatus(s) {
   // Sync MTU input
   const mtuInput = document.getElementById('mtuInput');
   if (mtuInput && !mtuInput._userChanged) mtuInput.value = s.mtu || 0;
+  // Sync Force IPv6
+  const ip6Box = document.getElementById('useIPv6');
+  if (ip6Box && !ip6Box._userChanged) ip6Box.checked = s.useIPv6 === true;
   
   // Fill domain list
   if (s.bypassDomains?.length > 0 && !document.getElementById('domainList').value)
@@ -274,13 +282,15 @@ async function saveSettings() {
   const autoConnect = document.getElementById('autoConnect').checked;
   const runAtStartup = document.getElementById('runAtStartup').checked;
   const mtu = parseInt(document.getElementById('mtuInput').value) || 0;
+  const useIPv6 = document.getElementById('useIPv6')?.checked ?? false;
   document.getElementById('autoConnect')._userChanged = true;
   document.getElementById('runAtStartup')._userChanged = true;
+  if (document.getElementById('useIPv6')) document.getElementById('useIPv6')._userChanged = true;
   try {
     await fetch(`${API}/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ autoConnect, runAtStartup, mtu })
+      body: JSON.stringify({ autoConnect, runAtStartup, mtu, useIPv6 })
     });
     const d = document.getElementById('setupMsg');
     d.innerHTML = '<div style="color:#3fb950;font-size:13px;margin-top:8px">✅ Settings saved.</div>';
