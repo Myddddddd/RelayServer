@@ -2,6 +2,7 @@ using WgClient.Services;
 using Microsoft.Win32;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
+using System.Diagnostics;
 
 try
 {
@@ -13,6 +14,29 @@ bool isAdmin = new WindowsPrincipal(WindowsIdentity.GetCurrent())
 StartupLog.Write($"IsAdmin: {isAdmin}");
 StartupLog.Write($"OS: {Environment.OSVersion}");
 StartupLog.Write($"Arch: {RuntimeInformation.OSArchitecture}");
+
+// ─── Single Instance: kill old WgClient before starting new one ────────
+{
+    var me = Process.GetCurrentProcess();
+    var old = Process.GetProcessesByName(me.ProcessName)
+                     .Where(p => p.Id != me.Id)
+                     .ToArray();
+    if (old.Length > 0)
+    {
+        StartupLog.Write($"Found {old.Length} old instance(s) — shutting them down...");
+        // Try graceful HTTP shutdown first
+        try
+        {
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+            await http.PostAsync("http://localhost:7432/api/shutdown", null);
+        } catch { }
+        await Task.Delay(1500); // give it time to close
+        // Hard kill any survivors
+        foreach (var proc in old)
+            try { if (!proc.HasExited) { proc.Kill(entireProcessTree: true); proc.WaitForExit(2000); } } catch { }
+        StartupLog.Write("Old instance killed. Continuing startup...");
+    }
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -254,6 +278,18 @@ api.MapPost("/disconnect", async (WireGuardManager wg) =>
 {
     await wg.DisconnectAsync();
     return new { connected = false };
+});
+
+// Graceful self-shutdown (called by new instance when replacing old one)
+api.MapPost("/shutdown", (IHostApplicationLifetime lifetime, WireGuardManager wg) =>
+{
+    _ = Task.Run(async () =>
+    {
+        await wg.DisconnectAsync();
+        await Task.Delay(300);
+        lifetime.StopApplication();
+    });
+    return new { stopping = true };
 });
 
 // Emergency: force-cleanup all WireGuard state (stuck service/adapter)
