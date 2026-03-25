@@ -4,18 +4,49 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$SCRIPT_DIR"
 TARGET_DIR="/opt/wg-dashboard"
+BACKUP_DIR="/opt/wg-dashboard.backup"
 VENV_DIR="$TARGET_DIR/venv"
 SERVICE_FILE_SRC="$REPO_DIR/dashboard/wg-dashboard.service"
 SERVICE_FILE_DST="/etc/systemd/system/wg-dashboard.service"
 WG_CONF="/etc/wireguard/wg0.conf"
 SERVER_PUBKEY_FILE="/etc/wireguard/server_public.key"
 REPO_PATH_FILE="$TARGET_DIR/.repo-path"
+PREV_DASHBOARD_STATE="unknown"
 
 require_root() {
   if [ "${EUID}" -ne 0 ]; then
     echo "Please run this script as root: sudo bash update-server.sh" >&2
     exit 1
   fi
+}
+
+capture_previous_state() {
+  PREV_DASHBOARD_STATE="$(systemctl is-active wg-dashboard 2>/dev/null || true)"
+}
+
+backup_current_dashboard() {
+  if [ -d "$TARGET_DIR" ]; then
+    rm -rf "$BACKUP_DIR"
+    mkdir -p "$BACKUP_DIR"
+    rsync -a --delete "$TARGET_DIR/" "$BACKUP_DIR/"
+  fi
+}
+
+rollback_dashboard() {
+  echo "Update failed. Restoring previous dashboard deployment..." >&2
+  if [ -d "$BACKUP_DIR" ]; then
+    mkdir -p "$TARGET_DIR"
+    rsync -a --delete "$BACKUP_DIR/" "$TARGET_DIR/"
+  fi
+
+  if [ "$PREV_DASHBOARD_STATE" = "active" ]; then
+    systemctl restart wg-dashboard || true
+  fi
+}
+
+on_error() {
+  rollback_dashboard
+  exit 1
 }
 
 ensure_packages() {
@@ -98,10 +129,14 @@ PY
 }
 
 require_root
+capture_previous_state
+backup_current_dashboard
+trap on_error ERR
 ensure_packages
 ensure_server_public_key
 sync_dashboard_files
 ensure_virtualenv
 install_service
 restart_services
+trap - ERR
 print_summary
