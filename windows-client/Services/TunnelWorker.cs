@@ -65,21 +65,25 @@ public class TunnelWorker(
 
                 // Auto-prefer IPv6 if server exposes it and client has IPv6 connectivity
                 string endpoint = poll.Config.ServerEndpoint;
+                string fallbackEndpoint = string.Empty;
                 if (!string.IsNullOrEmpty(poll.Config.ServerEndpointIpv6))
                 {
                     logger.LogInformation("Server supports IPv6 ({ep6}), testing client IPv6...", poll.Config.ServerEndpointIpv6);
                     if (await CheckIpv6ConnectivityAsync())
                     {
                         endpoint = poll.Config.ServerEndpointIpv6;
+                        fallbackEndpoint = poll.Config.ServerEndpoint;
                         logger.LogInformation("IPv6 available — using IPv6 endpoint: {ep}", endpoint);
                     }
                     else
                     {
+                        fallbackEndpoint = poll.Config.ServerEndpointIpv6;
                         logger.LogInformation("Client has no IPv6 — using IPv4 endpoint.");
                     }
                 }
 
                 cfg.ServerEndpoint = endpoint;
+                cfg.ServerEndpointFallback = fallbackEndpoint;
                 cfg.VpnSubnet = poll.Config.AllowedIps;
                 config.Save(cfg);
             }
@@ -104,16 +108,27 @@ public class TunnelWorker(
                 if (refreshPoll.Status == "approved" && refreshPoll.Config != null)
                 {
                     string freshEndpoint = refreshPoll.Config.ServerEndpoint;
+                    string fallbackEndpoint = string.Empty;
                     if (!string.IsNullOrEmpty(refreshPoll.Config.ServerEndpointIpv6))
                     {
                         bool useIpv6 = cfg.UseIPv6 || await CheckIpv6ConnectivityAsync();
                         if (useIpv6)
+                        {
                             freshEndpoint = refreshPoll.Config.ServerEndpointIpv6;
+                            fallbackEndpoint = refreshPoll.Config.ServerEndpoint;
+                        }
+                        else
+                        {
+                            fallbackEndpoint = refreshPoll.Config.ServerEndpointIpv6;
+                        }
                     }
-                    if (cfg.ServerEndpoint != freshEndpoint || cfg.ServerPublicKey != refreshPoll.Config.ServerPublicKey)
+                    if (cfg.ServerEndpoint != freshEndpoint
+                        || cfg.ServerEndpointFallback != fallbackEndpoint
+                        || cfg.ServerPublicKey != refreshPoll.Config.ServerPublicKey)
                     {
                         logger.LogInformation("Endpoint refreshed: {old} → {new}", cfg.ServerEndpoint, freshEndpoint);
                         cfg.ServerEndpoint = freshEndpoint;
+                        cfg.ServerEndpointFallback = fallbackEndpoint;
                         cfg.ServerPublicKey = refreshPoll.Config.ServerPublicKey;
                         cfg.VpnSubnet = refreshPoll.Config.AllowedIps;
                         config.Save(cfg);

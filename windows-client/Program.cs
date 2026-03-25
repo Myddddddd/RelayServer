@@ -108,6 +108,7 @@ api.MapGet("/status", (ConfigStore config, WireGuardManager wg) =>
         autoConnect = cfg.AutoConnect,
         runAtStartup = IsInStartup(),
         serverEndpoint = cfg.ServerEndpoint,
+        lastError = cfg.LastError,
         mtu = cfg.Mtu,
         useIPv6 = cfg.UseIPv6,
     };
@@ -185,6 +186,7 @@ api.MapPost("/connect", async (ConfigStore config, WireGuardManager wg, ServerAp
             cfg.ServerPublicKey = poll.Config.ServerPublicKey;
             cfg.VpnIp = poll.Config.VpnIp;
             cfg.VpnSubnet = poll.Config.AllowedIps;
+            string fallbackEndpoint = string.Empty;
             // Prefer IPv6 endpoint if available and client has IPv6
             if (!string.IsNullOrEmpty(poll.Config.ServerEndpointIpv6))
             {
@@ -196,6 +198,9 @@ api.MapPost("/connect", async (ConfigStore config, WireGuardManager wg, ServerAp
                     cfg.ServerEndpoint = r.IsSuccessStatusCode
                         ? poll.Config.ServerEndpointIpv6
                         : poll.Config.ServerEndpoint;
+                    fallbackEndpoint = r.IsSuccessStatusCode
+                        ? poll.Config.ServerEndpoint
+                        : poll.Config.ServerEndpointIpv6;
                 }
                 catch { cfg.ServerEndpoint = poll.Config.ServerEndpoint; }
             }
@@ -203,6 +208,7 @@ api.MapPost("/connect", async (ConfigStore config, WireGuardManager wg, ServerAp
             {
                 cfg.ServerEndpoint = poll.Config.ServerEndpoint;
             }
+            cfg.ServerEndpointFallback = fallbackEndpoint;
             config.Save(cfg);
         }
     }
@@ -211,10 +217,14 @@ api.MapPost("/connect", async (ConfigStore config, WireGuardManager wg, ServerAp
     try
     {
         await wg.ConnectAsync(cfg);
+        cfg.LastError = string.Empty;
+        config.Save(cfg);
         return Results.Ok(new { connected = true });
     }
     catch (Exception ex)
     {
+        cfg.LastError = ex.Message;
+        config.Save(cfg);
         return Results.BadRequest(new { error = ex.Message });
     }
 });

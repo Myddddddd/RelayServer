@@ -14,6 +14,8 @@ public class AppConfig
     public string VpnIp { get; set; } = "";
     public string ServerPublicKey { get; set; } = "";
     public string ServerEndpoint { get; set; } = "";
+    public string ServerEndpointFallback { get; set; } = "";
+    public string LastError { get; set; } = "";
     public string VpnSubnet { get; set; } = "10.0.0.0/24";
     public List<string> BypassDomains { get; set; } = [];
     public bool AutoConnect { get; set; } = false;

@@ -14,21 +14,23 @@ public class WireGuardManager(ILogger<WireGuardManager> logger)
     private const string WgExe = @"C:\Program Files\WireGuard\wg.exe";
     private const string WgTunnelExe = @"C:\Program Files\WireGuard\wireguard.exe";
     private const string TunnelName = "wgrelay";
+    private const string FallbackTunnelName = "wgrelay2";
 
     private static readonly string ConfigDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
         "WgRelayClient"
     );
 
-    private static readonly string ConfigFile = Path.Combine(ConfigDir, $"{TunnelName}.conf");
-
     private bool _connected = false;
+    private string _activeTunnelName = TunnelName;
+
+    private sealed record ConnectAttempt(string TunnelName, string Endpoint, int Mtu, string Reason);
 
     public bool IsConnected() => _connected && IsTunnelServiceRunning();
 
     private bool IsTunnelServiceRunning()
     {
-        var result = RunCommand("sc.exe", $"query WireGuardTunnel${TunnelName}");
+        var result = RunCommand("sc.exe", $"query WireGuardTunnel${_activeTunnelName}");
         return result.Contains("RUNNING");
     }
 
@@ -79,27 +81,113 @@ public class WireGuardManager(ILogger<WireGuardManager> logger)
             throw new InvalidOperationException(
                 "WireGuard not found. Please install WireGuard for Windows from https://www.wireguard.com/install/");
 
-        // Always do a full cleanup of any stale installation:
-        // 1) Uninstall via wireguard.exe (proper WireGuard-aware uninstall)
-        // 2) Hard-delete the service in case wireguard.exe uninstall left garbage
-        // 3) Remove the stuck Wintun adapter (this is the main cause of exit code 2)
-        var existing = RunCommand("sc.exe", $"query WireGuardTunnel${TunnelName}");
-        bool serviceExists = !existing.Contains("1060") && !existing.Contains("does not exist");
-        if (serviceExists)
+        var failures = new List<string>();
+        foreach (var attempt in BuildConnectAttempts(config))
         {
-            logger.LogInformation("Cleaning up existing tunnel service...");
-            RunElevated(WgTunnelExe, $"/uninstalltunnelservice {TunnelName}");
-            await Task.Delay(1000);
-            RunCommand("sc.exe", $"delete WireGuardTunnel${TunnelName}");
-            await Task.Delay(500);
+            logger.LogInformation(
+                "Connecting WireGuard tunnel using {reason}. Tunnel: {tunnel}; Endpoint: {endpoint}; MTU: {mtu}",
+                attempt.Reason,
+                attempt.TunnelName,
+                attempt.Endpoint,
+                attempt.Mtu > 0 ? attempt.Mtu : 1420
+            );
+
+            await EnsureCleanStateAsync(attempt.TunnelName);
+
+            Directory.CreateDirectory(ConfigDir);
+            var configFile = GetConfigFile(attempt.TunnelName);
+            var confContent = BuildWgConfig(config, attempt.Endpoint, attempt.Mtu);
+            File.WriteAllText(configFile, confContent, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            logger.LogInformation("Config written to: {path}", configFile);
+
+            logger.LogInformation("Installing WireGuard tunnel service...");
+            var output = RunElevated(WgTunnelExe, $"/installtunnelservice \"{configFile}\"");
+            logger.LogInformation("Install result: {out}", output);
+
+            await Task.Delay(3000);
+
+            _activeTunnelName = attempt.TunnelName;
+
+            if (IsTunnelServiceRunning())
+            {
+                _connected = true;
+                logger.LogInformation("WireGuard tunnel connected. VPN IP: {ip}", config.VpnIp);
+
+                if (config.BypassDomains.Count > 0)
+                    await AddDomainRoutesAsync(config.BypassDomains, config.VpnIp);
+
+                return;
+            }
+
+            var diagnostics = GetTunnelDiagnostics(attempt.TunnelName);
+            failures.Add($"{attempt.Reason}: {diagnostics}");
+            logger.LogWarning("WireGuard tunnel attempt failed: {details}", diagnostics);
+            await CleanupCurrentTunnelAsync(attempt.TunnelName);
         }
 
-        // Remove ALL other stale WireGuard tunnel services (routing conflicts)
+        throw new InvalidOperationException(
+            "Tunnel service failed to start after automatic fallback attempts. " + string.Join(" | ", failures));
+    }
+
+    private IEnumerable<ConnectAttempt> BuildConnectAttempts(AppConfig config)
+    {
+        var tunnelNames = new[] { TunnelName, FallbackTunnelName };
+        var attempts = new List<ConnectAttempt>
+        {
+            new(TunnelName, config.ServerEndpoint, config.Mtu, "primary endpoint")
+        };
+
+        attempts.Add(new ConnectAttempt(FallbackTunnelName, config.ServerEndpoint, config.Mtu, "alternate tunnel name fallback"));
+
+        if (!string.IsNullOrWhiteSpace(config.ServerEndpointFallback)
+            && !string.Equals(config.ServerEndpointFallback, config.ServerEndpoint, StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var tunnelName in tunnelNames)
+            {
+                attempts.Add(new ConnectAttempt(tunnelName, config.ServerEndpointFallback, config.Mtu, tunnelName == TunnelName ? "alternate endpoint fallback" : "alternate endpoint + tunnel name fallback"));
+            }
+        }
+
+        var safeMtu = GetFallbackMtu(config.Mtu);
+        if (safeMtu != config.Mtu)
+        {
+            foreach (var tunnelName in tunnelNames)
+            {
+                attempts.Add(new ConnectAttempt(tunnelName, config.ServerEndpoint, safeMtu, tunnelName == TunnelName ? "safe MTU fallback" : "safe MTU + tunnel name fallback"));
+            }
+
+            if (!string.IsNullOrWhiteSpace(config.ServerEndpointFallback)
+                && !string.Equals(config.ServerEndpointFallback, config.ServerEndpoint, StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var tunnelName in tunnelNames)
+                {
+                    attempts.Add(new ConnectAttempt(tunnelName, config.ServerEndpointFallback, safeMtu, tunnelName == TunnelName ? "alternate endpoint + safe MTU fallback" : "alternate endpoint + safe MTU + tunnel name fallback"));
+                }
+            }
+        }
+
+        return attempts
+            .Where(a => !string.IsNullOrWhiteSpace(a.Endpoint))
+            .DistinctBy(a => (a.TunnelName, a.Endpoint, a.Mtu));
+    }
+
+    private static int GetFallbackMtu(int currentMtu)
+    {
+        if (currentMtu is > 0 and <= 1280)
+            return currentMtu;
+
+        return 1280;
+    }
+
+    private async Task EnsureCleanStateAsync(string targetTunnelName)
+    {
+        await CleanupCurrentTunnelAsync(targetTunnelName);
+
         var allSvcs = RunCommand("sc.exe", "query type=all");
         var staleNames = allSvcs.Split('\n')
             .Where(l => l.TrimStart().StartsWith("SERVICE_NAME: WireGuardTunnel$"))
             .Select(l => l.Trim().Replace("SERVICE_NAME: WireGuardTunnel$", ""))
-            .Where(n => n.Trim() != TunnelName)
+            .Where(n => !string.Equals(n.Trim(), targetTunnelName, StringComparison.OrdinalIgnoreCase))
             .Select(n => n.Trim())
             .ToList();
         foreach (var staleName in staleNames)
@@ -111,45 +199,43 @@ public class WireGuardManager(ILogger<WireGuardManager> logger)
         }
         if (staleNames.Count > 0)
         {
-            // Remove all stale Wintun adapters
             var adapterCleanup = string.Join(";", staleNames.Select(n =>
                 $"Get-NetAdapter -Name '{n}' -EA SilentlyContinue | Remove-NetAdapter -Confirm:$false -EA SilentlyContinue"));
             RunCommand("powershell.exe", $"-NonInteractive -Command \"{adapterCleanup}\"");
             await Task.Delay(500);
         }
+    }
 
-        // Remove any leftover Wintun network adapter with same name
-        // (Wintun exit code 2 = adapter creation failed because old one still registered)
-        RunCommand("powershell.exe",
-            $"-NonInteractive -Command \"Get-NetAdapter -Name '{TunnelName}' -ErrorAction SilentlyContinue | Remove-NetAdapter -Confirm:$false -ErrorAction SilentlyContinue\"");
-        await Task.Delay(1000);
-
-        // Write config file - MUST use UTF-8 without BOM; WireGuard rejects BOM
-        Directory.CreateDirectory(ConfigDir);
-        var confContent = BuildWgConfig(config);
-        File.WriteAllText(ConfigFile, confContent, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        logger.LogInformation("Config written to: {path}", ConfigFile);
-
-        logger.LogInformation("Installing WireGuard tunnel service...");
-        var output = RunElevated(WgTunnelExe, $"/installtunnelservice \"{ConfigFile}\"");
-        logger.LogInformation("Install result: {out}", output);
-
-        // Wait for service to start (SYSTEM account reads config from ProgramData)
-        await Task.Delay(3000);
-
-        if (!IsTunnelServiceRunning())
+    private async Task CleanupCurrentTunnelAsync(string tunnelName)
+    {
+        var existing = RunCommand("sc.exe", $"query WireGuardTunnel${tunnelName}");
+        bool serviceExists = !existing.Contains("1060") && !existing.Contains("does not exist");
+        if (serviceExists)
         {
-            var svcStatus = RunCommand("sc.exe", $"query WireGuardTunnel${TunnelName}");
-            throw new InvalidOperationException($"Tunnel service failed to start. Status: {svcStatus.Replace("\r\n", " ").Trim()}");
+            logger.LogInformation("Cleaning up existing tunnel service...");
+            RunElevated(WgTunnelExe, $"/uninstalltunnelservice {tunnelName}");
+            await Task.Delay(1000);
+            RunCommand("sc.exe", $"delete WireGuardTunnel${tunnelName}");
+            await Task.Delay(500);
         }
 
-        _connected = true;
-        logger.LogInformation("WireGuard tunnel connected. VPN IP: {ip}", config.VpnIp);
-
-        // Add domain-specific routes
-        if (config.BypassDomains.Count > 0)
-            await AddDomainRoutesAsync(config.BypassDomains, config.VpnIp);
+        RunCommand("powershell.exe",
+            $"-NonInteractive -Command \"Get-NetAdapter -Name '{tunnelName}' -ErrorAction SilentlyContinue | Remove-NetAdapter -Confirm:$false -ErrorAction SilentlyContinue\"");
+        await Task.Delay(1000);
     }
+
+    private string GetTunnelDiagnostics(string tunnelName)
+    {
+        var svcStatus = RunCommand("sc.exe", $"query WireGuardTunnel${tunnelName}").Replace("\r\n", " ").Trim();
+        var svcStatusEx = RunCommand("sc.exe", $"queryex WireGuardTunnel${tunnelName}").Replace("\r\n", " ").Trim();
+        var evtLog = RunCommand(
+            "wevtutil.exe",
+            "qe System /q:\"*[System[Provider[@Name='WireGuardTunnel']]]\" /c:3 /rd:true /f:text"
+        ).Replace("\r\n", " ").Trim();
+        return $"Status: {svcStatus}; QueryEx: {svcStatusEx}; Events: {evtLog}";
+    }
+
+    private static string GetConfigFile(string tunnelName) => Path.Combine(ConfigDir, $"{tunnelName}.conf");
 
     /// <summary>
     /// Disconnect WireGuard tunnel.
@@ -158,21 +244,22 @@ public class WireGuardManager(ILogger<WireGuardManager> logger)
     {
         if (File.Exists(WgTunnelExe))
         {
-            var output = RunElevated(WgTunnelExe, $"/uninstalltunnelservice {TunnelName}");
+            var output = RunElevated(WgTunnelExe, $"/uninstalltunnelservice {_activeTunnelName}");
             logger.LogInformation("Uninstall result: {out}", output);
         }
         await Task.Delay(1000);
         _connected = false;
+        _activeTunnelName = TunnelName;
         logger.LogInformation("WireGuard tunnel disconnected.");
     }
 
     /// <summary>
     /// Build WireGuard .conf file content.
     /// </summary>
-    private static string BuildWgConfig(AppConfig config)
+    private static string BuildWgConfig(AppConfig config, string endpoint, int mtu)
     {
         // AllowedIPs: route only VPN subnet → no full-tunnel, system DNS is preserved
-        var mtuLine = config.Mtu > 0 ? $"\nMTU = {config.Mtu}" : "";
+        var mtuLine = mtu > 0 ? $"\nMTU = {mtu}" : "";
         return $"""
             [Interface]
             PrivateKey = {config.PrivateKey}
@@ -180,7 +267,7 @@ public class WireGuardManager(ILogger<WireGuardManager> logger)
 
             [Peer]
             PublicKey = {config.ServerPublicKey}
-            Endpoint = {config.ServerEndpoint}
+            Endpoint = {endpoint}
             AllowedIPs = {config.VpnSubnet}
             PersistentKeepalive = 25
             """;
