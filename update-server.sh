@@ -9,6 +9,7 @@ SERVICE_FILE_SRC="$REPO_DIR/dashboard/wg-dashboard.service"
 SERVICE_FILE_DST="/etc/systemd/system/wg-dashboard.service"
 WG_CONF="/etc/wireguard/wg0.conf"
 SERVER_PUBKEY_FILE="/etc/wireguard/server_public.key"
+REPO_PATH_FILE="$TARGET_DIR/.repo-path"
 
 require_root() {
   if [ "${EUID}" -ne 0 ]; then
@@ -53,6 +54,7 @@ sync_dashboard_files() {
     --exclude '__pycache__' \
     --exclude '.pytest_cache' \
     "$REPO_DIR/dashboard/" "$TARGET_DIR/"
+  printf "%s\n" "$REPO_DIR" > "$REPO_PATH_FILE"
 }
 
 ensure_virtualenv() {

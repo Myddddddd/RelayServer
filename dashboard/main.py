@@ -3,6 +3,7 @@ WireGuard Dashboard - Main Application
 Lightweight server for managing WireGuard peers.
 """
 import os
+import shlex
 import subprocess
 import sqlite3
 import secrets
@@ -27,6 +28,8 @@ SERVER_VPN_IP = "10.0.0.1"
 LISTEN_PORT = 51820
 DB_PATH = "/opt/wg-dashboard/peers.db"
 SESSION_EXPIRE_HOURS = 24
+REPO_PATH_FILE = "/opt/wg-dashboard/.repo-path"
+SELF_UPDATE_LOG = "/opt/wg-dashboard/self-update.log"
 
 app = FastAPI(title="WireGuard Dashboard", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -283,6 +286,27 @@ def regenerate_server_pubkey() -> tuple[str, str]:
 
     raise RuntimeError("Unable to regenerate server public key from wg interface or wg0.conf")
 
+def get_repo_dir() -> str:
+    env_repo = os.environ.get("WG_RELAY_REPO", "").strip()
+    if env_repo:
+        return env_repo
+
+    try:
+        repo_dir = Path(REPO_PATH_FILE).read_text().strip()
+        if repo_dir:
+            return repo_dir
+    except Exception:
+        pass
+
+    raise RuntimeError("Repository path is unknown. Run update-server.sh once from the repo checkout first.")
+
+def tail_file(path: str, line_count: int = 40) -> str:
+    try:
+        lines = Path(path).read_text().splitlines()
+        return "\n".join(lines[-line_count:])
+    except Exception:
+        return ""
+
 def allocate_vpn_ip() -> str:
     """Find next available IP in VPN subnet"""
     db = get_db()
@@ -482,6 +506,49 @@ def regenerate_server_public_key(_: str = Depends(require_admin)):
         return {"server_public_key": key, "source": source}
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+@app.post("/api/admin/self-update")
+def self_update(_: str = Depends(require_admin)):
+    try:
+        repo_dir = get_repo_dir()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    update_script = Path(repo_dir) / "update-server.sh"
+    if not update_script.exists():
+        raise HTTPException(status_code=404, detail=f"update-server.sh not found in repo: {repo_dir}")
+
+    try:
+        with open(SELF_UPDATE_LOG, "a", encoding="utf-8") as log_file:
+            log_file.write(f"\n[{datetime.utcnow().isoformat()}Z] Starting self-update from dashboard\n")
+
+        command = (
+            f"cd {shlex.quote(repo_dir)} && "
+            f"git pull && "
+            f"bash {shlex.quote(str(update_script))} >> {shlex.quote(SELF_UPDATE_LOG)} 2>&1"
+        )
+        subprocess.Popen(
+            ["nohup", "bash", "-lc", command],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        return {"started": True, "repo_dir": repo_dir, "log_path": SELF_UPDATE_LOG}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to start self-update: {exc}")
+
+@app.get("/api/admin/self-update-status")
+def self_update_status(_: str = Depends(require_admin)):
+    repo_dir = ""
+    try:
+        repo_dir = get_repo_dir()
+    except RuntimeError:
+        pass
+    return {
+        "repo_dir": repo_dir,
+        "log_path": SELF_UPDATE_LOG,
+        "log_tail": tail_file(SELF_UPDATE_LOG),
+    }
 
 @app.get("/api/network/peers")
 def network_peers():

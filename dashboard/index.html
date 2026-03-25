@@ -92,7 +92,7 @@
     </div>
   </div>
   <div class="main">
-    <div class="info-card" id="serverInfo" style="display:none"><h3>Server Info</h3><p id="serverInfoText"></p><div class="info-actions"><button class="btn btn-secondary btn-sm" onclick="refreshServerIp()">Refresh IP</button><button class="btn btn-warning btn-sm" onclick="regenerateServerPublicKey()">Rebuild Public Key</button></div><div class="info-note" id="serverInfoNote"></div></div>
+    <div class="info-card" id="serverInfo" style="display:none"><h3>Server Info</h3><p id="serverInfoText"></p><div class="info-actions"><button class="btn btn-secondary btn-sm" onclick="refreshServerIp()">Refresh IP</button><button class="btn btn-warning btn-sm" onclick="regenerateServerPublicKey()">Rebuild Public Key</button><button class="btn btn-primary btn-sm" onclick="startSelfUpdate()">Self Update</button><button class="btn btn-secondary btn-sm" onclick="showSelfUpdateStatus()">Update Log</button></div><div class="info-note" id="serverInfoNote"></div></div>
     <div class="tabs">
       <div class="tab active" onclick="switchTab('pending')" id="tabPending"> Pending</div>
       <div class="tab" onclick="switchTab('approved')" id="tabApproved"> Approved</div>
@@ -220,6 +220,27 @@ async function regenerateServerPublicKey(){
     loadAll();
   } else {
     showToast(d.detail||'Failed to rebuild server public key',true);
+  }
+}
+async function startSelfUpdate(){
+  if(!confirm('Pull latest code on the server and run update-server.sh now? The dashboard may restart during this process.'))return;
+  const res=await fetch(API+'/api/admin/self-update',{method:'POST',headers:authHeader()});
+  const d=await res.json();
+  if(res.ok){
+    document.getElementById('serverInfoNote').textContent='Self-update started. Wait 20-60 seconds, then refresh the page or open Update Log.';
+    showToast('Self-update started. Dashboard may restart shortly.');
+  } else {
+    showToast(d.detail||'Failed to start self-update',true);
+  }
+}
+async function showSelfUpdateStatus(){
+  const res=await fetch(API+'/api/admin/self-update-status',{headers:authHeader()});
+  const d=await res.json();
+  if(res.ok){
+    const log = d.log_tail ? `\n\n${d.log_tail}` : '';
+    alert(`Repo: ${d.repo_dir || '(unknown)'}\nLog: ${d.log_path}${log}`);
+  } else {
+    showToast(d.detail||'Failed to read update log',true);
   }
 }
 async function approvePeer(id){const res=await fetch(API+'/api/admin/approve/'+id,{method:'POST',headers:authHeader()});const d=await res.json();if(res.ok){showToast('✅ Approved! VPN IP: '+d.vpn_ip);loadAll();}else showToast(d.detail||'Error',true);}
