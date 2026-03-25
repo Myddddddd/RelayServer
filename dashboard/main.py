@@ -192,10 +192,56 @@ def require_admin(credentials: Optional[HTTPAuthorizationCredentials] = Depends(
 # ─── WireGuard helpers ─────────────────────────────────────────
 def get_server_pubkey() -> str:
     try:
-        return Path(SERVER_PUBKEY_FILE).read_text().strip()
+        key = Path(SERVER_PUBKEY_FILE).read_text().strip()
+        if key:
+            return key
     except:
-        result = subprocess.run(["wg", "show", WG_INTERFACE, "public-key"], capture_output=True, text=True)
-        return result.stdout.strip()
+        pass
+
+    try:
+        result = subprocess.run(
+            ["wg", "show", WG_INTERFACE, "public-key"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        key = result.stdout.strip()
+        if key:
+            try:
+                Path(SERVER_PUBKEY_FILE).write_text(key + "\n")
+            except:
+                pass
+            return key
+    except:
+        pass
+
+    try:
+        private_key = ""
+        for line in Path(WG_CONFIG).read_text().splitlines():
+            stripped = line.strip()
+            if stripped.startswith("PrivateKey") and "=" in stripped:
+                private_key = stripped.split("=", 1)[1].strip()
+                break
+
+        if private_key:
+            result = subprocess.run(
+                ["wg", "pubkey"],
+                input=private_key,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            key = result.stdout.strip()
+            if key:
+                try:
+                    Path(SERVER_PUBKEY_FILE).write_text(key + "\n")
+                except:
+                    pass
+                return key
+    except:
+        pass
+
+    return ""
 
 def allocate_vpn_ip() -> str:
     """Find next available IP in VPN subnet"""

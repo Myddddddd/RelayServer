@@ -54,18 +54,18 @@ public class TunnelWorker(
             _pollInterval = TimeSpan.FromSeconds(5);
             logger.LogDebug("Polling server for approval...");
 
-            var poll = await apiClient.PollAsync(cfg.ServerUrl, cfg.PeerId);
+            var poll = await apiClient.PollWithFallbackAsync(cfg.ServerUrl, cfg.PeerId);
 
             if (poll.Status == "approved" && poll.Config != null)
             {
                 logger.LogInformation("Device approved! VPN IP: {ip}", poll.Config.VpnIp);
                 cfg.ApprovalStatus = "approved";
-                cfg.VpnIp = poll.Config.VpnIp;
-                cfg.ServerPublicKey = poll.Config.ServerPublicKey;
+                cfg.VpnIp = string.IsNullOrWhiteSpace(poll.Config.VpnIp) ? cfg.VpnIp : poll.Config.VpnIp;
+                cfg.ServerPublicKey = string.IsNullOrWhiteSpace(poll.Config.ServerPublicKey) ? cfg.ServerPublicKey : poll.Config.ServerPublicKey;
 
                 // Auto-prefer IPv6 if server exposes it and client has IPv6 connectivity
-                string endpoint = poll.Config.ServerEndpoint;
-                string fallbackEndpoint = string.Empty;
+                string endpoint = string.IsNullOrWhiteSpace(poll.Config.ServerEndpoint) ? cfg.ServerEndpoint : poll.Config.ServerEndpoint;
+                string fallbackEndpoint = cfg.ServerEndpointFallback;
                 if (!string.IsNullOrEmpty(poll.Config.ServerEndpointIpv6))
                 {
                     logger.LogInformation("Server supports IPv6 ({ep6}), testing client IPv6...", poll.Config.ServerEndpointIpv6);
@@ -84,7 +84,7 @@ public class TunnelWorker(
 
                 cfg.ServerEndpoint = endpoint;
                 cfg.ServerEndpointFallback = fallbackEndpoint;
-                cfg.VpnSubnet = poll.Config.AllowedIps;
+                cfg.VpnSubnet = string.IsNullOrWhiteSpace(poll.Config.AllowedIps) ? cfg.VpnSubnet : poll.Config.AllowedIps;
                 config.Save(cfg);
             }
             else if (poll.Status == "rejected")
@@ -104,11 +104,11 @@ public class TunnelWorker(
             // Refresh endpoint from server (keeps endpoint current if server IP changes)
             try
             {
-                var refreshPoll = await apiClient.PollAsync(cfg.ServerUrl, cfg.PeerId);
+                var refreshPoll = await apiClient.PollWithFallbackAsync(cfg.ServerUrl, cfg.PeerId);
                 if (refreshPoll.Status == "approved" && refreshPoll.Config != null)
                 {
-                    string freshEndpoint = refreshPoll.Config.ServerEndpoint;
-                    string fallbackEndpoint = string.Empty;
+                    string freshEndpoint = string.IsNullOrWhiteSpace(refreshPoll.Config.ServerEndpoint) ? cfg.ServerEndpoint : refreshPoll.Config.ServerEndpoint;
+                    string fallbackEndpoint = cfg.ServerEndpointFallback;
                     if (!string.IsNullOrEmpty(refreshPoll.Config.ServerEndpointIpv6))
                     {
                         bool useIpv6 = cfg.UseIPv6 || await CheckIpv6ConnectivityAsync();
@@ -124,13 +124,14 @@ public class TunnelWorker(
                     }
                     if (cfg.ServerEndpoint != freshEndpoint
                         || cfg.ServerEndpointFallback != fallbackEndpoint
-                        || cfg.ServerPublicKey != refreshPoll.Config.ServerPublicKey)
+                        || (!string.IsNullOrWhiteSpace(refreshPoll.Config.ServerPublicKey) && cfg.ServerPublicKey != refreshPoll.Config.ServerPublicKey)
+                        || (!string.IsNullOrWhiteSpace(refreshPoll.Config.AllowedIps) && cfg.VpnSubnet != refreshPoll.Config.AllowedIps))
                     {
                         logger.LogInformation("Endpoint refreshed: {old} → {new}", cfg.ServerEndpoint, freshEndpoint);
                         cfg.ServerEndpoint = freshEndpoint;
                         cfg.ServerEndpointFallback = fallbackEndpoint;
-                        cfg.ServerPublicKey = refreshPoll.Config.ServerPublicKey;
-                        cfg.VpnSubnet = refreshPoll.Config.AllowedIps;
+                        cfg.ServerPublicKey = string.IsNullOrWhiteSpace(refreshPoll.Config.ServerPublicKey) ? cfg.ServerPublicKey : refreshPoll.Config.ServerPublicKey;
+                        cfg.VpnSubnet = string.IsNullOrWhiteSpace(refreshPoll.Config.AllowedIps) ? cfg.VpnSubnet : refreshPoll.Config.AllowedIps;
                         config.Save(cfg);
                     }
                 }

@@ -18,9 +18,10 @@ WG_CONF="/etc/wireguard/wg0.conf"
 if [ ! -f "$WG_CONF" ]; then
   echo "Creating WireGuard config..."
   umask 077
-  wg genkey | tee server.key | wg pubkey > server.pub
-  SERVER_PRIV=$(cat server.key)
-  SERVER_PUB=$(cat server.pub)
+  sudo mkdir -p /etc/wireguard
+  sudo sh -c 'umask 077; wg genkey | tee /etc/wireguard/server_private.key | wg pubkey > /etc/wireguard/server_public.key'
+  SERVER_PRIV=$(sudo cat /etc/wireguard/server_private.key)
+  SERVER_PUB=$(sudo cat /etc/wireguard/server_public.key)
   SERVER_IP="10.0.0.1/24"
   SERVER_PORT=51820
   cat > $WG_CONF <<EOF
@@ -29,7 +30,12 @@ Address = $SERVER_IP
 ListenPort = $SERVER_PORT
 PrivateKey = $SERVER_PRIV
 EOF
-  rm server.key server.pub
+fi
+
+if [ ! -f "/etc/wireguard/server_public.key" ] && [ -f "$WG_CONF" ]; then
+  echo "Recovering missing server_public.key from wg0.conf..."
+  sudo sh -c "awk -F'=' '/^[[:space:]]*PrivateKey[[:space:]]*=/{print \$2; exit}' '$WG_CONF' | xargs echo -n | wg pubkey > /etc/wireguard/server_public.key"
+  sudo chmod 600 /etc/wireguard/server_public.key
 fi
 
 # 4. Start WireGuard

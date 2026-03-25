@@ -52,6 +52,34 @@ public class ServerApiClient(IHttpClientFactory httpFactory, ILogger<ServerApiCl
         return JsonSerializer.Deserialize<PollResponse>(json, JsonOpts)!;
     }
 
+    public async Task<PollResponse> PollWithFallbackAsync(string serverUrl, string peerId)
+    {
+        var poll = await PollAsync(serverUrl, peerId);
+        if (poll.Status != "approved" || poll.Config is null || !NeedsServerInfoFallback(poll.Config))
+            return poll;
+
+        try
+        {
+            var info = await GetServerInfoAsync(serverUrl);
+            return poll with
+            {
+                Config = poll.Config with
+                {
+                    ServerPublicKey = string.IsNullOrWhiteSpace(poll.Config.ServerPublicKey) ? info.ServerPublicKey : poll.Config.ServerPublicKey,
+                    ServerEndpoint = string.IsNullOrWhiteSpace(poll.Config.ServerEndpoint) ? info.Endpoint : poll.Config.ServerEndpoint,
+                    ServerEndpointIpv6 = string.IsNullOrWhiteSpace(poll.Config.ServerEndpointIpv6) ? info.EndpointIpv6 : poll.Config.ServerEndpointIpv6,
+                    Dns = string.IsNullOrWhiteSpace(poll.Config.Dns) ? info.Dns : poll.Config.Dns,
+                    AllowedIps = string.IsNullOrWhiteSpace(poll.Config.AllowedIps) ? info.VpnSubnet : poll.Config.AllowedIps,
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to hydrate approved peer config from /api/server-info for {serverUrl}", serverUrl);
+            return poll;
+        }
+    }
+
     public async Task<ServerInfo> GetServerInfoAsync(string serverUrl)
     {
         var response = await GetClient().GetAsync($"{serverUrl}/api/server-info");
@@ -59,4 +87,10 @@ public class ServerApiClient(IHttpClientFactory httpFactory, ILogger<ServerApiCl
         var json = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<ServerInfo>(json, JsonOpts)!;
     }
+
+    private static bool NeedsServerInfoFallback(PollConfig config)
+        => string.IsNullOrWhiteSpace(config.ServerPublicKey)
+        || string.IsNullOrWhiteSpace(config.ServerEndpoint)
+        || string.IsNullOrWhiteSpace(config.AllowedIps)
+        || string.IsNullOrWhiteSpace(config.Dns);
 }

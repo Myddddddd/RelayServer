@@ -81,6 +81,18 @@ public class WireGuardManager(ILogger<WireGuardManager> logger)
             throw new InvalidOperationException(
                 "WireGuard not found. Please install WireGuard for Windows from https://www.wireguard.com/install/");
 
+        if (string.IsNullOrWhiteSpace(config.ServerPublicKey))
+            throw new InvalidOperationException(
+                "Server public key is missing from client config. Retry Connect so the client can refresh server metadata.");
+
+        if (string.IsNullOrWhiteSpace(config.ServerEndpoint))
+            throw new InvalidOperationException(
+                "Server endpoint is missing from client config. Retry Connect so the client can refresh server metadata.");
+
+        if (string.IsNullOrWhiteSpace(config.VpnIp))
+            throw new InvalidOperationException(
+                "VPN IP is missing from client config. Wait for approval to finish syncing, then try Connect again.");
+
         var failures = new List<string>();
         foreach (var attempt in BuildConnectAttempts(config))
         {

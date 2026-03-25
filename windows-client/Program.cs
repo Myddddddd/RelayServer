@@ -180,12 +180,12 @@ api.MapPost("/connect", async (ConfigStore config, WireGuardManager wg, ServerAp
     // This handles server IP changes (e.g. VPS migration) without re-registration
     try
     {
-        var poll = await apiClient.PollAsync(cfg.ServerUrl, cfg.PeerId);
+        var poll = await apiClient.PollWithFallbackAsync(cfg.ServerUrl, cfg.PeerId);
         if (poll.Status == "approved" && poll.Config != null)
         {
-            cfg.ServerPublicKey = poll.Config.ServerPublicKey;
-            cfg.VpnIp = poll.Config.VpnIp;
-            cfg.VpnSubnet = poll.Config.AllowedIps;
+            cfg.ServerPublicKey = string.IsNullOrWhiteSpace(poll.Config.ServerPublicKey) ? cfg.ServerPublicKey : poll.Config.ServerPublicKey;
+            cfg.VpnIp = string.IsNullOrWhiteSpace(poll.Config.VpnIp) ? cfg.VpnIp : poll.Config.VpnIp;
+            cfg.VpnSubnet = string.IsNullOrWhiteSpace(poll.Config.AllowedIps) ? cfg.VpnSubnet : poll.Config.AllowedIps;
             string fallbackEndpoint = string.Empty;
             // Prefer IPv6 endpoint if available and client has IPv6
             if (!string.IsNullOrEmpty(poll.Config.ServerEndpointIpv6))
@@ -202,13 +202,16 @@ api.MapPost("/connect", async (ConfigStore config, WireGuardManager wg, ServerAp
                         ? poll.Config.ServerEndpoint
                         : poll.Config.ServerEndpointIpv6;
                 }
-                catch { cfg.ServerEndpoint = poll.Config.ServerEndpoint; }
+                catch
+                {
+                    cfg.ServerEndpoint = string.IsNullOrWhiteSpace(poll.Config.ServerEndpoint) ? cfg.ServerEndpoint : poll.Config.ServerEndpoint;
+                }
             }
             else
             {
-                cfg.ServerEndpoint = poll.Config.ServerEndpoint;
+                cfg.ServerEndpoint = string.IsNullOrWhiteSpace(poll.Config.ServerEndpoint) ? cfg.ServerEndpoint : poll.Config.ServerEndpoint;
             }
-            cfg.ServerEndpointFallback = fallbackEndpoint;
+            cfg.ServerEndpointFallback = string.IsNullOrWhiteSpace(fallbackEndpoint) ? cfg.ServerEndpointFallback : fallbackEndpoint;
             config.Save(cfg);
         }
     }

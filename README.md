@@ -69,6 +69,20 @@ systemctl restart wg-quick@wg0 wg-dashboard
 python deploy_dashboard.py
 ```
 
+### Update Server After Pull
+```bash
+git pull
+sudo bash update-server.sh
+```
+
+This script:
+- repairs `/etc/wireguard/server_public.key` from `wg0.conf` if it is missing,
+- syncs dashboard source into `/opt/wg-dashboard`,
+- installs Python dependencies into the server venv,
+- refreshes `wg-dashboard.service`,
+- restarts `wg-quick@wg0` and `wg-dashboard`,
+- prints the local `/api/server-info` payload for verification.
+
 ---
 
 ## Windows Client
