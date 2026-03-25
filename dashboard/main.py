@@ -22,6 +22,7 @@ from pydantic import BaseModel
 # ─── Config ───────────────────────────────────────────────────
 WG_INTERFACE = "wg0"
 WG_CONFIG = "/etc/wireguard/wg0.conf"
+SERVER_PRIVKEY_FILE = "/etc/wireguard/server_private.key"
 SERVER_PUBKEY_FILE = "/etc/wireguard/server_public.key"
 VPN_SUBNET = "10.0.0.0/24"
 SERVER_VPN_IP = "10.0.0.1"
@@ -193,6 +194,27 @@ def require_admin(credentials: Optional[HTTPAuthorizationCredentials] = Depends(
     return session["username"]
 
 # ─── WireGuard helpers ─────────────────────────────────────────
+def get_server_private_key() -> str:
+    try:
+        key = Path(SERVER_PRIVKEY_FILE).read_text().strip().replace("\r", "")
+        if key:
+            return "".join(key.split())
+    except Exception:
+        pass
+
+    try:
+        for line in Path(WG_CONFIG).read_text().splitlines():
+            stripped = line.strip()
+            if stripped.startswith("PrivateKey") and "=" in stripped:
+                value = stripped.split("=", 1)[1].split("#", 1)[0]
+                value = "".join(value.split()).replace("\r", "")
+                if value:
+                    return value
+    except Exception:
+        pass
+
+    return ""
+
 def get_server_pubkey() -> str:
     try:
         key = Path(SERVER_PUBKEY_FILE).read_text().strip()
@@ -219,13 +241,7 @@ def get_server_pubkey() -> str:
         pass
 
     try:
-        private_key = ""
-        for line in Path(WG_CONFIG).read_text().splitlines():
-            stripped = line.strip()
-            if stripped.startswith("PrivateKey") and "=" in stripped:
-                private_key = stripped.split("=", 1)[1].strip()
-                break
-
+        private_key = get_server_private_key()
         if private_key:
             result = subprocess.run(
                 ["wg", "pubkey"],
@@ -262,13 +278,7 @@ def regenerate_server_pubkey() -> tuple[str, str]:
         pass
 
     try:
-        private_key = ""
-        for line in Path(WG_CONFIG).read_text().splitlines():
-            stripped = line.strip()
-            if stripped.startswith("PrivateKey") and "=" in stripped:
-                private_key = stripped.split("=", 1)[1].strip()
-                break
-
+        private_key = get_server_private_key()
         if private_key:
             result = subprocess.run(
                 ["wg", "pubkey"],
@@ -280,7 +290,8 @@ def regenerate_server_pubkey() -> tuple[str, str]:
             key = result.stdout.strip()
             if key:
                 Path(SERVER_PUBKEY_FILE).write_text(key + "\n")
-                return key, "wg-config-private-key"
+                source = "server-private-key-file" if Path(SERVER_PRIVKEY_FILE).exists() else "wg-config-private-key"
+                return key, source
     except Exception:
         pass
 

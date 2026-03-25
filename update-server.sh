@@ -9,6 +9,7 @@ VENV_DIR="$TARGET_DIR/venv"
 SERVICE_FILE_SRC="$REPO_DIR/dashboard/wg-dashboard.service"
 SERVICE_FILE_DST="/etc/systemd/system/wg-dashboard.service"
 WG_CONF="/etc/wireguard/wg0.conf"
+SERVER_PRIVKEY_FILE="/etc/wireguard/server_private.key"
 SERVER_PUBKEY_FILE="/etc/wireguard/server_public.key"
 REPO_PATH_FILE="$TARGET_DIR/.repo-path"
 PREV_DASHBOARD_STATE="unknown"
@@ -55,6 +56,20 @@ ensure_packages() {
   apt-get install -y wireguard wireguard-tools python3 python3-venv python3-pip rsync
 }
 
+read_server_private_key() {
+  if [ -s "$SERVER_PRIVKEY_FILE" ]; then
+    tr -d '\r[:space:]' < "$SERVER_PRIVKEY_FILE"
+    return
+  fi
+
+  if [ -f "$WG_CONF" ]; then
+    awk -F'=' '/^[[:space:]]*PrivateKey[[:space:]]*=/{value=$2; sub(/#.*/, "", value); gsub(/[[:space:]\r]/, "", value); print value; exit}' "$WG_CONF"
+    return
+  fi
+
+  echo ""
+}
+
 ensure_server_public_key() {
   mkdir -p /etc/wireguard
   chmod 700 /etc/wireguard
@@ -64,15 +79,13 @@ ensure_server_public_key() {
     return
   fi
 
-  if [ -f "$WG_CONF" ]; then
-    echo "Recovering server_public.key from wg0.conf..."
-    local private_key
-    private_key="$(awk -F'=' '/^[[:space:]]*PrivateKey[[:space:]]*=/{print $2; exit}' "$WG_CONF" | xargs)"
-    if [ -n "$private_key" ]; then
-      printf "%s" "$private_key" | wg pubkey > "$SERVER_PUBKEY_FILE"
-      chmod 600 "$SERVER_PUBKEY_FILE"
-      return
-    fi
+  echo "Recovering server_public.key from available private key state..."
+  local private_key
+  private_key="$(read_server_private_key)"
+  if [ -n "$private_key" ]; then
+    printf "%s" "$private_key" | wg pubkey > "$SERVER_PUBKEY_FILE"
+    chmod 600 "$SERVER_PUBKEY_FILE"
+    return
   fi
 
   echo "Unable to recover server public key automatically." >&2
