@@ -243,6 +243,46 @@ def get_server_pubkey() -> str:
 
     return ""
 
+def regenerate_server_pubkey() -> tuple[str, str]:
+    try:
+        result = subprocess.run(
+            ["wg", "show", WG_INTERFACE, "public-key"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        key = result.stdout.strip()
+        if key:
+            Path(SERVER_PUBKEY_FILE).write_text(key + "\n")
+            return key, "wg-show"
+    except Exception:
+        pass
+
+    try:
+        private_key = ""
+        for line in Path(WG_CONFIG).read_text().splitlines():
+            stripped = line.strip()
+            if stripped.startswith("PrivateKey") and "=" in stripped:
+                private_key = stripped.split("=", 1)[1].strip()
+                break
+
+        if private_key:
+            result = subprocess.run(
+                ["wg", "pubkey"],
+                input=private_key,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            key = result.stdout.strip()
+            if key:
+                Path(SERVER_PUBKEY_FILE).write_text(key + "\n")
+                return key, "wg-config-private-key"
+    except Exception:
+        pass
+
+    raise RuntimeError("Unable to regenerate server public key from wg interface or wg0.conf")
+
 def allocate_vpn_ip() -> str:
     """Find next available IP in VPN subnet"""
     db = get_db()
@@ -434,6 +474,14 @@ def refresh_server_ip(_: str = Depends(require_admin)):
     ipv4 = get_server_ip()
     ipv6 = get_server_ipv6()
     return {"ipv4": ipv4, "ipv6": ipv6}
+
+@app.post("/api/admin/regenerate-server-public-key")
+def regenerate_server_public_key(_: str = Depends(require_admin)):
+    try:
+        key, source = regenerate_server_pubkey()
+        return {"server_public_key": key, "source": source}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 @app.get("/api/network/peers")
 def network_peers():

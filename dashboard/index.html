@@ -52,6 +52,8 @@
   .info-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
   .info-card h3 { font-size: 14px; color: #8b949e; margin-bottom: 8px; }
   .info-card p { font-family: monospace; font-size: 14px; color: #58a6ff; word-break: break-all; }
+  .info-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .info-note { font-size: 12px; color: #8b949e; margin-top: 10px; min-height: 16px; }
   .toast { position: fixed; bottom: 24px; right: 24px; background: #238636; color: #fff; padding: 12px 20px; border-radius: 8px; font-size: 14px; display: none; z-index: 1000; }
   .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid #30363d; }
   .tab { padding: 8px 16px; cursor: pointer; font-size: 14px; color: #8b949e; border-bottom: 2px solid transparent; margin-bottom: -1px; }
@@ -90,7 +92,7 @@
     </div>
   </div>
   <div class="main">
-    <div class="info-card" id="serverInfo" style="display:none"><h3>Server Info</h3><p id="serverInfoText"></p></div>
+    <div class="info-card" id="serverInfo" style="display:none"><h3>Server Info</h3><p id="serverInfoText"></p><div class="info-actions"><button class="btn btn-secondary btn-sm" onclick="refreshServerIp()">Refresh IP</button><button class="btn btn-warning btn-sm" onclick="regenerateServerPublicKey()">Rebuild Public Key</button></div><div class="info-note" id="serverInfoNote"></div></div>
     <div class="tabs">
       <div class="tab active" onclick="switchTab('pending')" id="tabPending"> Pending</div>
       <div class="tab" onclick="switchTab('approved')" id="tabApproved"> Approved</div>
@@ -198,8 +200,27 @@ async function loadAll(){
     const si=await fetch(API+'/api/server-info'),info=await si.json();
     document.getElementById('serverInfo').style.display='block';
     document.getElementById('serverInfoText').textContent=`Endpoint: ${info.endpoint} | Public Key: ${info.server_public_key} | Subnet: ${info.vpn_subnet}`;
+    document.getElementById('serverInfoNote').textContent = info.server_public_key ? '' : 'Server public key is empty. Use Rebuild Public Key to restore it.';
     document.getElementById('serverStatus').textContent=`${peers.filter(p=>p.online).length} online  ${peers.filter(p=>p.status==='pending').length} pending`;
   }catch(e){showToast('Connection error: '+e.message,true);}
+}
+async function refreshServerIp(){
+  const res=await fetch(API+'/api/admin/refresh-server-ip',{method:'POST',headers:authHeader()});
+  const d=await res.json();
+  if(res.ok){showToast(`Server IP refreshed: ${d.ipv4}${d.ipv6?` | ${d.ipv6}`:''}`);loadAll();}
+  else showToast(d.detail||'Failed to refresh server IP',true);
+}
+async function regenerateServerPublicKey(){
+  if(!confirm('Regenerate server public key from current WireGuard state?'))return;
+  const res=await fetch(API+'/api/admin/regenerate-server-public-key',{method:'POST',headers:authHeader()});
+  const d=await res.json();
+  if(res.ok){
+    document.getElementById('serverInfoNote').textContent=`Rebuilt server public key via ${d.source}.`;
+    showToast('Server public key rebuilt successfully');
+    loadAll();
+  } else {
+    showToast(d.detail||'Failed to rebuild server public key',true);
+  }
 }
 async function approvePeer(id){const res=await fetch(API+'/api/admin/approve/'+id,{method:'POST',headers:authHeader()});const d=await res.json();if(res.ok){showToast('✅ Approved! VPN IP: '+d.vpn_ip);loadAll();}else showToast(d.detail||'Error',true);}
 async function rejectPeer(id){if(!confirm('Reject this peer?'))return;const res=await fetch(API+'/api/admin/reject/'+id,{method:'POST',headers:authHeader()});if(res.ok){showToast('Rejected');loadAll();}else showToast('Error',true);}
