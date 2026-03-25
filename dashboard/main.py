@@ -336,11 +336,14 @@ def allocate_vpn_ip() -> str:
 def wg_add_peer(public_key: str, vpn_ip: str):
     """Add peer to running WireGuard interface and persist to config"""
     # Add to running interface
-    subprocess.run([
+    result = subprocess.run([
         "wg", "set", WG_INTERFACE,
         "peer", public_key,
         "allowed-ips", f"{vpn_ip}/32"
-    ], check=True)
+    ], capture_output=True, text=True)
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout or "wg set failed").strip()
+        raise RuntimeError(details)
     
     # Persist to config file
     peer_block = f"\n[Peer]\nPublicKey = {public_key}\nAllowedIPs = {vpn_ip}/32\n"
