@@ -6,7 +6,7 @@ import paramiko
 import time
 import sys
 
-HOST = "103.126.161.38"
+HOST = "103.126.162.46"
 PORT = 22
 USERNAME = "root"
 

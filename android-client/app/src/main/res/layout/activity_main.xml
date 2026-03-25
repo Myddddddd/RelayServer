@@ -143,7 +143,7 @@
             android:id="@+id/etServerUrl"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:hint="http://103.126.161.38:8080"
+            android:hint="http://103.126.162.46:8080"
             android:inputType="textUri"
             android:textColor="#E1E4E8"
             android:textColorHint="#6E7681"

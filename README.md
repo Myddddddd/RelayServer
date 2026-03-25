@@ -20,7 +20,7 @@ All client traffic passes through the VPS. Clients can selectively route specifi
 
 ## Server
 
-**Location:** Ubuntu VPS at `103.126.161.38`
+**Location:** Ubuntu VPS at `103.126.162.46`
 
 ### Components
 - **WireGuard** — `wg0` interface at `10.0.0.1/24`, UDP port `51820`
@@ -33,7 +33,7 @@ All client traffic passes through the VPS. Clients can selectively route specifi
 | VPN Subnet | `10.0.0.0/24` |
 | Server VPN IP | `10.0.0.1` |
 | WireGuard Port | `51820/UDP` |
-| Dashboard URL | `http://103.126.161.38:8080` |
+| Dashboard URL | `http://103.126.162.46:8080` |
 | Admin Token | `wg-relay-2026` |
 | Server Public Key | `5egwDvIu4h5eawsFpoYjrrK0fQ4sWJpgWUG2EegOM0E=` |
 
@@ -115,9 +115,9 @@ sc start WgRelayClient
 ### Usage
 1. Run `WgClient.exe` (admin rights needed for WireGuard tunnel)
 2. Open `http://localhost:7432` in browser
-3. Enter Server URL (`http://103.126.161.38:8080`) and device name
+3. Enter Server URL (`http://103.126.162.46:8080`) and device name
 4. Click **Register Device**
-5. Wait for admin approval in dashboard at `http://103.126.161.38:8080`
+5. Wait for admin approval in dashboard at `http://103.126.162.46:8080`
 6. Click **Connect** when approved
 
 ### Config Storage

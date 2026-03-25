@@ -6,7 +6,7 @@ import paramiko
 from pathlib import Path
 import sys
 
-HOST = "103.126.161.38"
+HOST = "103.126.162.46"
 PORT = 22
 USERNAME = "root"
 ADMIN_TOKEN = "wg-relay-2026"  # Change this!

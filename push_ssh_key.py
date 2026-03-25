@@ -8,7 +8,7 @@ import re
 import sys
 
 # --- Config ---
-HOST = "103.126.161.38"
+HOST = "103.126.162.46"
 PORT = 22
 USERNAME = "root"
 PASSWORD = "TEm02Rw2e6Uf"
